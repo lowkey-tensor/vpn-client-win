@@ -1,0 +1,31 @@
+# сборка
+bin/
+obj/
+app/
+app-*/
+build*/
+_release/
+_dl/
+_test/
+*.user
+.vs/
+
+# бинарные ядра — скачиваются scripts/fetch-core.ps1 (официальные релизы, проверка SHA256)
+core/*.exe
+core/*.dll
+
+# локальные скрипты обновления и журналы (содержат личные пути)
+update*.ps1
+update-log.txt
+*.log
+
+# данные пользователя и секреты — не должны попадать в репозиторий
+state.dat
+config.json
+xray.json
+*.pem
+*.key
+.env
+
+# старая версия правил Shadowrocket (с ошибкой GEOIP) — заменена Shadowrocket-v2.conf
+mobile/Shadowrocket-как-на-ПК.conf

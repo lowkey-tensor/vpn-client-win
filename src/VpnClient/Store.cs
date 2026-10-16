@@ -1,0 +1,95 @@
+using System.IO;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Windows.Media;
+
+namespace VpnClient;
+
+public class NodeEntry : System.ComponentModel.INotifyPropertyChanged
+{
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+
+    // пинг: null — не измерен, -1 — недоступен
+    private int? _ping;
+    [JsonIgnore] public int? Ping
+    {
+        get => _ping;
+        set
+        {
+            _ping = value;
+            PropertyChanged?.Invoke(this, new(nameof(PingText)));
+            PropertyChanged?.Invoke(this, new(nameof(PingBrush)));
+        }
+    }
+    [JsonIgnore] public string PingText => _ping switch { null => "", -1 => "нет ответа", 0 => "…", var v => $"{v} мс" };
+    [JsonIgnore] public Brush PingBrush => new SolidColorBrush(_ping switch
+    {
+        null or 0 => Color.FromRgb(0x8A, 0x93, 0xA3),
+        -1 => Color.FromRgb(0xFF, 0x6B, 0x6B),
+        < 100 => Color.FromRgb(0x2B, 0xD4, 0x7D),
+        < 250 => Color.FromRgb(0xF5, 0xB7, 0x3B),
+        _ => Color.FromRgb(0xFF, 0x6B, 0x6B),
+    });
+
+    public string Name { get; set; } = "";
+    public string Link { get; set; } = "";
+    public string? Sub { get; set; }
+    public string Protocol => LinkParser.Protocol(Link);
+    public override string ToString() => $"{Name}  [{Protocol}]";
+
+    // для карточки в списке
+    [JsonIgnore] public string Badge => Protocol == "VLESS" ? "VLESS" : "HY2";
+    [JsonIgnore] public Brush BadgeBrush => new SolidColorBrush(Protocol == "VLESS"
+        ? Color.FromRgb(0x7C, 0x5C, 0xFF) : Color.FromRgb(0x14, 0xB8, 0xA6));
+    [JsonIgnore] public string Host
+    {
+        get
+        {
+            try { var u = new Uri(Link); return $"{u.Host}:{u.Port}"; }
+            catch { return ""; }
+        }
+    }
+}
+
+public class State
+{
+    public List<NodeEntry> Nodes { get; set; } = new();
+    public List<string> Subs { get; set; } = new();
+    public string? SelectedLink { get; set; }
+    public Mode Mode { get; set; } = Mode.SystemProxy;
+    public bool RuDirect { get; set; } = true;
+    public bool AdBlock { get; set; } = true;
+    public bool AutoRecover { get; set; } = true;
+    // раздельный туннель
+    public List<string> DirectApps { get; set; } = new();   // имена exe — мимо VPN
+    public List<string> DirectSites { get; set; } = new();  // домены — мимо VPN
+    public List<string> ProxySites { get; set; } = new();   // домены — всегда через VPN
+}
+
+/// <summary>Состояние хранится в %APPDATA%\VpnClient\state.dat, зашифровано DPAPI (только этот пользователь Windows).</summary>
+public static class Store
+{
+    public static readonly string Dir = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "VpnClient");
+    private static string FilePath => Path.Combine(Dir, "state.dat");
+
+    public static State Load()
+    {
+        try
+        {
+            if (!File.Exists(FilePath)) return new State();
+            var raw = ProtectedData.Unprotect(File.ReadAllBytes(FilePath), null, DataProtectionScope.CurrentUser);
+            return JsonSerializer.Deserialize<State>(Encoding.UTF8.GetString(raw)) ?? new State();
+        }
+        catch { return new State(); }
+    }
+
+    public static void Save(State s)
+    {
+        Directory.CreateDirectory(Dir);
+        var raw = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(s));
+        File.WriteAllBytes(FilePath, ProtectedData.Protect(raw, null, DataProtectionScope.CurrentUser));
+    }
+}

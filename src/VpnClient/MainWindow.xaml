@@ -1,0 +1,163 @@
+<Window x:Class="VpnClient.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="VPN-клиент" Width="460" Height="900" MinWidth="400" MinHeight="640"
+        Background="{StaticResource Bg}" Foreground="{StaticResource Text}" FontSize="14"
+        FontFamily="Segoe UI Variable Text, Segoe UI"
+        WindowStartupLocation="CenterScreen">
+    <Grid Margin="18,14,18,14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- заголовок -->
+            <RowDefinition Height="Auto"/>  <!-- кнопка -->
+            <RowDefinition Height="Auto"/>  <!-- режим -->
+            <RowDefinition Height="Auto"/>  <!-- добавление -->
+            <RowDefinition Height="*"/>     <!-- узлы -->
+            <RowDefinition Height="Auto"/>  <!-- настройки -->
+            <RowDefinition Height="Auto"/>  <!-- журнал -->
+        </Grid.RowDefinitions>
+
+        <!-- заголовок -->
+        <DockPanel Grid.Row="0">
+            <Border x:Name="StatusPill" DockPanel.Dock="Right" CornerRadius="10" Padding="10,3" Background="#22262F" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse x:Name="StatusDot" Width="8" Height="8" Fill="{StaticResource Muted}" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="StatusPillText" Text="Отключено" FontSize="12" Foreground="{StaticResource Muted}"/>
+                </StackPanel>
+            </Border>
+            <TextBlock Text="VPN" FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
+        </DockPanel>
+
+        <!-- кнопка подключения -->
+        <StackPanel Grid.Row="1" Margin="0,18,0,12" HorizontalAlignment="Center">
+            <Button x:Name="ConnectBtn" Style="{StaticResource PowerBtn}" Background="#3A4150" Click="OnConnect"/>
+            <TextBlock x:Name="StatusText" Text="Нажмите, чтобы подключиться" HorizontalAlignment="Center" Margin="0,12,0,0"
+                       FontSize="16" FontWeight="SemiBold"/>
+            <TextBlock x:Name="SubStatus" Text=" " HorizontalAlignment="Center" Margin="0,4,0,0" Foreground="{StaticResource Muted}" FontSize="12"/>
+            <!-- скорость и трафик -->
+            <Border x:Name="StatsPanel" Background="{StaticResource Card}" CornerRadius="10" Padding="14,6" Margin="0,10,0,0" Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <TextBlock Text="↓" Foreground="{StaticResource Green}" FontWeight="Bold"/>
+                    <TextBlock x:Name="DownText" Text="0 Б/с" Margin="4,0,14,0" MinWidth="70"/>
+                    <TextBlock Text="↑" Foreground="{StaticResource Accent}" FontWeight="Bold"/>
+                    <TextBlock x:Name="UpText" Text="0 Б/с" Margin="4,0,14,0" MinWidth="70"/>
+                    <TextBlock x:Name="TotalText" Text="" Foreground="{StaticResource Muted}" Margin="0,0,14,0"/>
+                    <TextBlock x:Name="RealPingText" Text="" FontWeight="SemiBold" ToolTip="Задержка запроса через VPN"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <!-- режим -->
+        <Border Grid.Row="2" Background="{StaticResource Card}" CornerRadius="10" Padding="4" Margin="0,0,0,14">
+            <UniformGrid Columns="2">
+                <RadioButton x:Name="ModeProxy" Style="{StaticResource Segment}" Content="Системный прокси" IsChecked="True"/>
+                <RadioButton x:Name="ModeTun" Style="{StaticResource Segment}" Content="TUN — весь трафик"/>
+            </UniformGrid>
+        </Border>
+
+        <!-- добавление -->
+        <Grid Grid.Row="3" Margin="0,0,0,10" Height="40">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="InputBox" Style="{StaticResource Input}" Tag="Вставьте ссылку или подписку…" KeyDown="OnInputKey"/>
+            <Button Grid.Column="1" Style="{StaticResource AccentBtn}" Margin="8,0,0,0" Width="44" Padding="0" Click="OnAdd" ToolTip="Добавить">
+                <TextBlock Text="+" FontSize="20" Margin="0,-3,0,0"/>
+            </Button>
+            <Button Grid.Column="2" Style="{StaticResource Btn}" Margin="8,0,0,0" Width="44" Padding="0" Click="OnRefresh" ToolTip="Обновить подписки">
+                <TextBlock Text="⟳" FontSize="17"/>
+            </Button>
+            <Button Grid.Column="3" Style="{StaticResource Btn}" Margin="8,0,0,0" Width="44" Padding="0" Click="OnPing" ToolTip="Проверить пинг">
+                <TextBlock Text="⚡" FontSize="15"/>
+            </Button>
+        </Grid>
+
+        <!-- узлы -->
+        <Grid Grid.Row="4">
+            <ListBox x:Name="NodeList" Background="Transparent" BorderThickness="0" Padding="0"
+                     ItemContainerStyle="{StaticResource NodeItem}" SelectionChanged="OnSelect" KeyDown="OnListKey"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border CornerRadius="6" Padding="7,3" VerticalAlignment="Center" Background="{Binding BadgeBrush}">
+                                <TextBlock Text="{Binding Badge}" FontSize="11" FontWeight="Bold" Foreground="White"/>
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="#ECEEF2"/>
+                                <TextBlock Text="{Binding Host}" FontSize="12" Foreground="#8A93A3" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            <TextBlock Grid.Column="2" Text="{Binding PingText}" Foreground="{Binding PingBrush}"
+                                       FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <Button Grid.Column="3" Style="{StaticResource QrBtn}" Tag="{Binding}" Click="OnQr" ToolTip="QR-код для телефона">
+                                <Path Data="M3,3 H10 V10 H3 Z M14,3 H21 V10 H14 Z M3,14 H10 V21 H3 Z M14,14 H17 V17 H14 Z M18,18 H21 V21 H18 Z M18,14 H21 M14,21 H17"
+                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                      StrokeThickness="1.8" StrokeLineJoin="Round" Width="16" Height="16" Stretch="Uniform"/>
+                            </Button>
+                            <Button Grid.Column="4" Style="{StaticResource IconBtn}" Tag="{Binding}" Click="OnDeleteNode" ToolTip="Удалить конфиг">
+                                <Path Data="M3,6 H21 M8,6 V4 H16 V6 M6,6 L7,21 H17 L18,6 M10,10 V17 M14,10 V17"
+                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                      StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                      Width="16" Height="16" Stretch="Uniform"/>
+                            </Button>
+                        </Grid>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock x:Name="EmptyHint" Text="Пока нет конфигов.&#10;Скопируйте ссылку из панели и вставьте выше."
+                       TextAlignment="Center" Foreground="{StaticResource Muted}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+        </Grid>
+
+        <!-- настройки -->
+        <Border Grid.Row="5" Background="{StaticResource Card}" CornerRadius="12" Padding="14,10" Margin="0,8,0,8">
+            <StackPanel>
+                <CheckBox x:Name="RuBox" Style="{StaticResource Switch}" Margin="0,2,0,8">
+                    <StackPanel>
+                        <TextBlock Text="Российские сайты напрямую"/>
+                        <TextBlock Text="Ozon, банки, Госуслуги не увидят VPN" FontSize="12" Foreground="{StaticResource Muted}"/>
+                    </StackPanel>
+                </CheckBox>
+                <CheckBox x:Name="AdBox" Style="{StaticResource Switch}" Margin="0,2,0,8">
+                    <StackPanel>
+                        <TextBlock Text="Блокировать рекламу и трекеры"/>
+                        <TextBlock Text="Для всех программ, на уровне DNS" FontSize="12" Foreground="{StaticResource Muted}"/>
+                    </StackPanel>
+                </CheckBox>
+                <CheckBox x:Name="RecoverBox" Style="{StaticResource Switch}" Margin="0,2,0,8" Click="OnRecoverToggle">
+                    <StackPanel>
+                        <TextBlock Text="Автовосстановление"/>
+                        <TextBlock Text="Переподключение и смена узла, если связь пропала" FontSize="12" Foreground="{StaticResource Muted}"/>
+                    </StackPanel>
+                </CheckBox>
+                <CheckBox x:Name="AutoBox" Style="{StaticResource Switch}" Click="OnAutoStart" Margin="0,2,0,8">
+                    <StackPanel>
+                        <TextBlock Text="Автозапуск с Windows"/>
+                        <TextBlock Text="Стартует в трее и подключается сам" FontSize="12" Foreground="{StaticResource Muted}"/>
+                    </StackPanel>
+                </CheckBox>
+                <Button x:Name="RoutesBtn" Style="{StaticResource Btn}" HorizontalContentAlignment="Stretch" Click="OnRoutes" Margin="0,2,0,0">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Right" Text="›" FontSize="18" Foreground="{StaticResource Muted}" Margin="0,-4,0,0"/>
+                        <TextBlock Text="Маршруты: программы и сайты"/>
+                    </DockPanel>
+                </Button>
+            </StackPanel>
+        </Border>
+
+        <!-- журнал -->
+        <Expander Grid.Row="6" Foreground="{StaticResource Muted}" Header="Журнал">
+            <TextBox x:Name="LogBox" Height="130" Margin="0,6,0,0" IsReadOnly="True" VerticalScrollBarVisibility="Auto"
+                     TextWrapping="NoWrap" Background="#0A0C10" Foreground="#8A93A3" BorderBrush="{StaticResource Line}"
+                     FontFamily="Consolas" FontSize="11" Padding="6"/>
+        </Expander>
+    </Grid>
+</Window>

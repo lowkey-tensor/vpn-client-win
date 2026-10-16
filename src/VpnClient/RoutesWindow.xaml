@@ -1,0 +1,78 @@
+<Window x:Class="VpnClient.RoutesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Маршруты" Width="460" Height="700" MinHeight="520"
+        Background="{StaticResource Bg}" Foreground="{StaticResource Text}" FontSize="14"
+        FontFamily="Segoe UI Variable Text, Segoe UI"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <Window.Resources>
+        <Style x:Key="ListBox" TargetType="TextBox">
+            <Setter Property="AcceptsReturn" Value="True"/>
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="Background" Value="#0A0C10"/>
+            <Setter Property="Foreground" Value="{StaticResource Text}"/>
+            <Setter Property="CaretBrush" Value="{StaticResource Text}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="6"/>
+            <Setter Property="Margin" Value="0,6,0,0"/>
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="{StaticResource Card}" CornerRadius="12" Padding="14,10" Margin="0,0,0,10">
+            <DockPanel>
+                <DockPanel DockPanel.Dock="Top">
+                    <Button DockPanel.Dock="Right" Style="{StaticResource Btn}" Padding="10,5" VerticalAlignment="Top" FontSize="13"
+                            Content="Выбрать…" ToolTip="Выбрать exe-файл программы" Click="OnPickApp"/>
+                    <StackPanel>
+                        <TextBlock Text="Программы напрямую" FontWeight="SemiBold"/>
+                        <TextBlock Style="{StaticResource Hint}" Text="Мимо VPN, например игры. Только режим TUN."/>
+                    </StackPanel>
+                </DockPanel>
+                <TextBox x:Name="AppsBox" Style="{StaticResource ListBox}"/>
+            </DockPanel>
+        </Border>
+
+        <Border Grid.Row="1" Background="{StaticResource Card}" CornerRadius="12" Padding="14,10" Margin="0,0,0,10">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top">
+                    <TextBlock Text="Сайты напрямую" FontWeight="SemiBold"/>
+                    <TextBlock Style="{StaticResource Hint}" Text="Один домен на строку — включает и поддомены. Пример: sber.ru"/>
+                </StackPanel>
+                <TextBox x:Name="DirectBox" Style="{StaticResource ListBox}"/>
+            </DockPanel>
+        </Border>
+
+        <Border Grid.Row="2" Background="{StaticResource Card}" CornerRadius="12" Padding="14,10" Margin="0,0,0,10">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top">
+                    <TextBlock Text="Сайты всегда через VPN" FontWeight="SemiBold"/>
+                    <TextBlock Style="{StaticResource Hint}" Text="Важнее остальных правил: например .ru-сайт, который нужен через VPN."/>
+                </StackPanel>
+                <TextBox x:Name="ProxyBox" Style="{StaticResource ListBox}"/>
+            </DockPanel>
+        </Border>
+
+        <DockPanel Grid.Row="3">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button Style="{StaticResource Btn}" Content="Отмена" Margin="0,0,8,0" IsCancel="True"/>
+                <Button Style="{StaticResource AccentBtn}" Content="Сохранить" Click="OnSave"/>
+            </StackPanel>
+            <TextBlock Text="Применится при следующем подключении" Foreground="{StaticResource Muted}" FontSize="12"
+                       TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,12,0"/>
+        </DockPanel>
+    </Grid>
+</Window>
