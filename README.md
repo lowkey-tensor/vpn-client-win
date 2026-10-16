@@ -1,67 +1,83 @@
-# VPN-клиент для Windows
+# VPN Client for Windows
 
-Лёгкий клиент в стиле Happ / Hiddify: вставил ссылку или подписку, нажал одну кнопку. Работает на ядрах
-[sing-box](https://github.com/SagerNet/sing-box) и [Xray-core](https://github.com/XTLS/Xray-core).
+**English** · [Русский](README.ru.md)
 
-## Поддерживаемые протоколы
+A lightweight Windows VPN client in the spirit of Happ and Hiddify: paste a link or a subscription, press one button.
+Powered by [sing-box](https://github.com/SagerNet/sing-box) and [Xray-core](https://github.com/XTLS/Xray-core).
 
-| Протокол | Ссылка | Особенности |
+## Install
+
+1. Download the latest `VpnClient-*-win-x64.zip` from **Releases** and unzip it anywhere.
+2. Run `VpnClient.exe` and accept the administrator prompt (needed for TUN mode and autostart).
+3. Paste a node link or a subscription URL into the field at the top, press `+`, select a node and press the big round button.
+
+Windows may show "Windows protected your PC" because the app is not code-signed.
+Click **More info → Run anyway**. No .NET installation is required, and the cores are bundled (`core` folder).
+
+## Supported protocols
+
+| Protocol | Link | Notes |
 |---|---|---|
-| VLESS | `vless://` | Reality, TLS, Vision; транспорты tcp / ws / grpc / h2 / httpupgrade; **VLESS-шифрование (mlkem) и XHTTP** через Xray |
-| VMess | `vmess://` | форматы v2rayN (base64 JSON), `vmess://uuid@host`, Shadowrocket |
+| VLESS | `vless://` | Reality, TLS, Vision; tcp / ws / grpc / h2 / httpupgrade transports; **VLESS encryption (mlkem) and XHTTP** via Xray |
+| VMess | `vmess://` | v2rayN (base64 JSON), `vmess://uuid@host` and Shadowrocket formats |
 | Trojan | `trojan://` | TLS, Reality, ws / grpc |
-| Shadowsocks | `ss://` | SIP002 и старый формат, SS-2022, плагины obfs-local и v2ray-plugin |
+| Shadowsocks | `ss://` | SIP002 and legacy formats, SS-2022, obfs-local and v2ray-plugin |
 | TUIC | `tuic://` | v5 |
-| Hysteria 2 | `hysteria2://`, `hy2://` | obfs salamander, port hopping |
+| Hysteria 2 | `hysteria2://`, `hy2://` | salamander obfs, port hopping |
 | Hysteria | `hysteria://` | v1 (udp) |
 | AnyTLS | `anytls://` | |
-| SOCKS5 | `socks://`, `socks5://` | с логином и без |
+| SOCKS5 | `socks://`, `socks5://` | with or without credentials |
 
-Не поддерживаются: WireGuard (ссылкой), mKCP, Shadowsocks с shadow-tls. Клиент напишет понятную причину в журнале.
-Все протоколы проверены сквозным тестом на локальных серверах (каждая ссылка → конфиг → соединение).
+Not supported: WireGuard links, mKCP, Shadowsocks with shadow-tls. The client explains why in its log.
+Every protocol has been tested end to end against local test servers (link → config → working connection).
 
-## Возможности
+## Features
 
-- Режимы: **системный прокси** и **TUN** (весь трафик компьютера).
-- Импорт: ссылки, подписки (обычный текст и base64), QR-код конфига для телефона.
-- Российские сайты напрямую (Ozon, банки, Госуслуги не видят VPN) — переключатель.
-- Блокировка рекламы и трекеров на уровне DNS.
-- Раздельный туннель: программы и сайты «напрямую» / «всегда через VPN».
-- Скорость, трафик, реальный пинг через VPN; пинг до серверов в списке.
-- Автовосстановление: переподключение, смена узла, реакция на сон/пробуждение.
-- Автозапуск при входе в Windows (задача Планировщика с правами администратора, без окна UAC), работа в трее.
-- Журнал в файл (`%APPDATA%\VpnClient\logs`, хранится 7 дней).
+- Modes: **system proxy** and **TUN** (all traffic on the computer).
+- Import: links, subscriptions (plain text and base64), QR code of a node for the phone.
+- Russian sites direct (banks, marketplaces and government sites don't see the VPN) — a switch.
+- Ad and tracker blocking at the DNS level.
+- Split tunneling: programs and sites can go "direct" or "always through the VPN".
+- Live speed, traffic and real latency through the VPN; latency to the servers in the list.
+- Auto-recovery: reconnect, switch to another node, react to sleep and wake-up.
+- Autostart at Windows sign-in (a Task Scheduler job with admin rights, no UAC prompt), lives in the tray.
+- Multiplexing (mux) is enabled for VLESS via Xray: dozens of application connections share a few TCP connections to
+  the server. Without it, servers and ISPs that limit new connections stall most requests in TUN mode.
+- Log files (`%APPDATA%\VpnClient\logs`, kept for 7 days).
 
-## Сборка
+## Build from source
 
-Нужны [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) и Windows 10/11 x64.
+Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) and Windows 10/11 x64.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\fetch-core.ps1   # ядра в core\ (проверка SHA256)
+powershell -ExecutionPolicy Bypass -File scripts\fetch-core.ps1   # downloads the cores into core\ (SHA256-verified)
 dotnet build src\VpnClient -c Release -o app
 app\VpnClient.exe
 ```
 
-Автономный архив (без установки .NET у пользователя):
+A self-contained archive (no .NET needed on the target machine):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 4.0
+powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 4.1
 ```
 
-Приложению нужны права администратора (для TUN и автозапуска), Windows спросит подтверждение при запуске.
+## Where data is stored
 
-## Где хранятся данные
+`%APPDATA%\VpnClient\state.dat` holds the node list and settings, encrypted with Windows DPAPI (readable only by your
+Windows account). Temporary configs containing keys are wiped 3 seconds after the core starts.
+Keys and links never enter the repository (see `.gitignore`).
 
-`%APPDATA%\VpnClient\state.dat` — список узлов и настройки, зашифровано средствами Windows (DPAPI, доступно
-только вашей учётной записи). Временные конфиги с ключами стираются через 3 секунды после старта ядра.
-Ключи и ссылки в репозиторий не попадают (`.gitignore`).
+## Uninstall
 
-## Телефон
+Quit the client (tray icon → Exit), turn off "Start with Windows" in the settings and delete the program folder.
+User data lives in `%APPDATA%\VpnClient`.
 
-В папке `mobile/` лежат готовые правила для Shadowrocket (iOS) с теми же настройками, что в клиенте.
+## Phone
 
-## Ядра и лицензии
+The `mobile/` folder contains ready-made rules for Shadowrocket (iOS) with the same behavior as the desktop client.
 
-Бинарники sing-box и Xray-core в репозиторий не включены: их скачивает `scripts/fetch-core.ps1`
-с официальных релизов. Они распространяются по собственным лицензиям — см. страницы проектов.
-Программа предоставляется «как есть», без гарантий.
+## Cores and licenses
+
+The sing-box and Xray-core binaries are not stored in this repository: `scripts/fetch-core.ps1` downloads them from
+the official releases. They are distributed under their own licenses; see the projects' pages.
+The software is provided "as is", without warranty of any kind.
