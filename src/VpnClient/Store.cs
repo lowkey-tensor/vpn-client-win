@@ -40,17 +40,33 @@ public class NodeEntry : System.ComponentModel.INotifyPropertyChanged
     public override string ToString() => $"{Name}  [{Protocol}]";
 
     // для карточки в списке
-    [JsonIgnore] public string Badge => Protocol == "VLESS" ? "VLESS" : "HY2";
-    [JsonIgnore] public Brush BadgeBrush => new SolidColorBrush(Protocol == "VLESS"
-        ? Color.FromRgb(0x7C, 0x5C, 0xFF) : Color.FromRgb(0x14, 0xB8, 0xA6));
-    [JsonIgnore] public string Host
+    [JsonIgnore] public string Badge => Protocol switch
     {
-        get
-        {
-            try { var u = new Uri(Link); return $"{u.Host}:{u.Port}"; }
-            catch { return ""; }
-        }
-    }
+        "Hysteria2" => "HY2",
+        "Hysteria" => "HY",
+        "Shadowsocks" => "SS",
+        var p => p.ToUpperInvariant(),
+    };
+
+    [JsonIgnore] public Brush BadgeBrush => new SolidColorBrush(Protocol switch
+    {
+        "VLESS" => Color.FromRgb(0x7C, 0x5C, 0xFF),
+        "VMess" => Color.FromRgb(0x3B, 0x82, 0xF6),
+        "Trojan" => Color.FromRgb(0xE1, 0x5B, 0x3D),
+        "Shadowsocks" => Color.FromRgb(0x22, 0xA5, 0x5E),
+        "TUIC" => Color.FromRgb(0xD9, 0x46, 0xA6),
+        "Hysteria2" => Color.FromRgb(0x14, 0xB8, 0xA6),
+        "Hysteria" => Color.FromRgb(0xC2, 0x8A, 0x1E),
+        "AnyTLS" => Color.FromRgb(0x06, 0x91, 0xB2),
+        _ => Color.FromRgb(0x64, 0x74, 0x8B),
+    });
+
+    /// <summary>Адрес сервера из ссылки (null, если ссылку не удалось разобрать).</summary>
+    [JsonIgnore] public string? Server => LinkParser.Endpoint(Link)?.Host;
+    [JsonIgnore] public int Port => LinkParser.Endpoint(Link)?.Port ?? 0;
+    [JsonIgnore] public string Host => LinkParser.Endpoint(Link) is { } e
+        ? (e.Host.Contains(':') ? $"[{e.Host}]:{e.Port}" : $"{e.Host}:{e.Port}")
+        : "";
 }
 
 public class State

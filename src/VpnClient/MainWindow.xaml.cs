@@ -214,8 +214,9 @@ public partial class MainWindow : Window
             {
                 try
                 {
-                    var u = new Uri(n.Link);
-                    n.Ping = await Pinger.MeasureAsync(u.Host.Trim('[', ']'), u.Port) ?? -1;
+                    n.Ping = n.Server is { } host && n.Port > 0
+                        ? await Pinger.MeasureAsync(host, n.Port) ?? -1
+                        : -1;
                 }
                 catch { n.Ping = -1; }
             }));

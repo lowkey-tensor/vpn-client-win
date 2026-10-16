@@ -16,7 +16,9 @@ public class CoreRunner
     public event Action? Exited;
     public bool IsRunning => _singbox is { HasExited: false };
 
-    private static string CoreDir => Path.Combine(AppContext.BaseDirectory, "core");
+    // папка самого exe, а не AppContext.BaseDirectory: в однофайловой сборке они могут различаться
+    private static string CoreDir => Path.Combine(
+        Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory, "core");
     public static string SingBoxPath => Path.Combine(CoreDir, "sing-box.exe");
     public static string XrayPath => Path.Combine(CoreDir, "xray.exe");
 

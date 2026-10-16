@@ -3,11 +3,27 @@
 Лёгкий клиент в стиле Happ / Hiddify: вставил ссылку или подписку, нажал одну кнопку. Работает на ядрах
 [sing-box](https://github.com/SagerNet/sing-box) и [Xray-core](https://github.com/XTLS/Xray-core).
 
+## Поддерживаемые протоколы
+
+| Протокол | Ссылка | Особенности |
+|---|---|---|
+| VLESS | `vless://` | Reality, TLS, Vision; транспорты tcp / ws / grpc / h2 / httpupgrade; **VLESS-шифрование (mlkem) и XHTTP** через Xray |
+| VMess | `vmess://` | форматы v2rayN (base64 JSON), `vmess://uuid@host`, Shadowrocket |
+| Trojan | `trojan://` | TLS, Reality, ws / grpc |
+| Shadowsocks | `ss://` | SIP002 и старый формат, SS-2022, плагины obfs-local и v2ray-plugin |
+| TUIC | `tuic://` | v5 |
+| Hysteria 2 | `hysteria2://`, `hy2://` | obfs salamander, port hopping |
+| Hysteria | `hysteria://` | v1 (udp) |
+| AnyTLS | `anytls://` | |
+| SOCKS5 | `socks://`, `socks5://` | с логином и без |
+
+Не поддерживаются: WireGuard (ссылкой), mKCP, Shadowsocks с shadow-tls. Клиент напишет понятную причину в журнале.
+Все протоколы проверены сквозным тестом на локальных серверах (каждая ссылка → конфиг → соединение).
+
 ## Возможности
 
-- Протоколы: **VLESS** (Reality, TLS, VLESS-шифрование и XHTTP через Xray), **Hysteria2**.
 - Режимы: **системный прокси** и **TUN** (весь трафик компьютера).
-- Импорт: ссылки `vless://`, `hysteria2://`, подписки (обычный текст и base64), QR-код конфига для телефона.
+- Импорт: ссылки, подписки (обычный текст и base64), QR-код конфига для телефона.
 - Российские сайты напрямую (Ozon, банки, Госуслуги не видят VPN) — переключатель.
 - Блокировка рекламы и трекеров на уровне DNS.
 - Раздельный туннель: программы и сайты «напрямую» / «всегда через VPN».
@@ -24,6 +40,12 @@
 powershell -ExecutionPolicy Bypass -File scripts\fetch-core.ps1   # ядра в core\ (проверка SHA256)
 dotnet build src\VpnClient -c Release -o app
 app\VpnClient.exe
+```
+
+Автономный архив (без установки .NET у пользователя):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 4.0
 ```
 
 Приложению нужны права администратора (для TUN и автозапуска), Windows спросит подтверждение при запуске.

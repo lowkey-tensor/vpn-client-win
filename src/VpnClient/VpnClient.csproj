@@ -25,7 +25,7 @@
 
   <ItemGroup>
     <!-- sing-box и xray кладём рядом с exe -->
-    <None Include="..\..\core\**\*" LinkBase="core" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\core\**\*" LinkBase="core" CopyToOutputDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>
 
 </Project>
