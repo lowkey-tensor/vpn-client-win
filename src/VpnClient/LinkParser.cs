@@ -269,7 +269,7 @@ public static class LinkParser
                 break;
         }
 
-        return new JsonObject
+        var outbound = new JsonObject
         {
             ["protocol"] = "vless",
             ["tag"] = "proxy",
@@ -284,6 +284,15 @@ public static class LinkParser
             },
             ["streamSettings"] = ss,
         };
+
+        // Мультиплексирование: без него каждое соединение приложения = отдельное TCP-соединение к серверу.
+        // Серверы и провайдеры часто пропускают лишь несколько новых соединений в секунду, остальные виснут
+        // (проверено: из 12 одновременных запросов без mux проходило 2, с mux — 12). В TUN приложения открывают
+        // десятки соединений сразу. Не включаем для Vision (flow несовместим с mux) и для XHTTP/gRPC (они мультиплексируют сами).
+        if ((net is "tcp" or "ws" or "httpupgrade") && string.IsNullOrEmpty(q["flow"]))
+            outbound["mux"] = new JsonObject { ["enabled"] = true, ["concurrency"] = 8, ["xudpConcurrency"] = 16 };
+
+        return outbound;
     }
 
     // ================= VMess =================
