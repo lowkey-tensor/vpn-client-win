@@ -77,8 +77,12 @@ User data lives in `%APPDATA%\VpnClient`.
 
 The `mobile/` folder contains ready-made rules for Shadowrocket (iOS) with the same behavior as the desktop client.
 
-## Cores and licenses
+## License
+
+This project is released under the [MIT License](LICENSE).
+
+## Cores and third-party licenses
 
 The sing-box and Xray-core binaries are not stored in this repository: `scripts/fetch-core.ps1` downloads them from
-the official releases. They are distributed under their own licenses; see the projects' pages.
+the official releases. They are distributed under their own licenses (copies are in `core/`); see the projects' pages.
 The software is provided "as is", without warranty of any kind.

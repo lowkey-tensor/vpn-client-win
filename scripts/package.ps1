@@ -22,9 +22,14 @@ dotnet publish (Join-Path $root 'src\VpnClient') -c Release -r win-x64 --self-co
     -p:DebugType=none -o $pub
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish завершился с ошибкой' }
 
+Copy-Item (Join-Path $root 'LICENSE') $pub -Force
 $zip = Join-Path $out "VpnClient-$Version-win-x64.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
-Compress-Archive -Path (Join-Path $pub '*') -DestinationPath $zip -CompressionLevel Optimal
+# Compress-Archive (PowerShell 5.1) пишет пути с обратным слешем и ломает распаковку на macOS/Linux — собираем zip сами
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$za = [IO.Compression.ZipFile]::Open($zip, 'Create')
+Get-ChildItem $pub -Recurse -File | ForEach-Object { $rel = $_.FullName.Substring($pub.Length + 1).Replace('\', '/'); [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($za, $_.FullName, $rel, 'Optimal') }
+$za.Dispose()
 $h = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
 Set-Content (Join-Path $out "VpnClient-$Version-win-x64.zip.sha256") "$h  VpnClient-$Version-win-x64.zip" -Encoding ascii
 "{0}  {1:N1} МБ  sha256 {2}" -f $zip, ((Get-Item $zip).Length / 1MB), $h
