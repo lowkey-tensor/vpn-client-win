@@ -58,7 +58,7 @@ app\VpnClient.exe
 A self-contained archive (no .NET needed on the target machine):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 4.1
+powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 4.3
 ```
 
 ## Where data is stored
@@ -66,6 +66,7 @@ powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 4.1
 `%APPDATA%\VpnClient\state.dat` holds the node list and settings, encrypted with Windows DPAPI (readable only by your
 Windows account). Temporary configs containing keys are wiped 3 seconds after the core starts.
 Keys and links never enter the repository (see `.gitignore`).
+Set the `VPNCLIENT_DATA_DIR` environment variable to keep data, logs and temporary configs in another folder (tests, portable use).
 
 ## Uninstall
 

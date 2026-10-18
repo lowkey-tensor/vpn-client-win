@@ -59,7 +59,7 @@ app\VpnClient.exe
 Автономный архив (без установки .NET у пользователя):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 4.1
+powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 4.3
 ```
 
 ## Где хранятся данные
@@ -67,6 +67,7 @@ powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 4.1
 `%APPDATA%\VpnClient\state.dat` — список узлов и настройки, зашифровано средствами Windows (DPAPI, доступно
 только вашей учётной записи). Временные конфиги с ключами стираются через 3 секунды после старта ядра.
 Ключи и ссылки в репозиторий не попадают (`.gitignore`).
+Переменная окружения `VPNCLIENT_DATA_DIR` переносит данные, журналы и временные конфиги в другую папку (тесты, портативный запуск).
 
 ## Удаление
 

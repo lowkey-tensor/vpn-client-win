@@ -37,6 +37,8 @@ public partial class MainWindow : Window
     public MainWindow(bool autoConnect)
     {
         InitializeComponent();
+        VersionText.Text = "v" + AppInfo.Version;
+        Title = $"VPN-клиент {AppInfo.Version}";
         SourceInitialized += (_, _) => ApplyDark(this);
         Icon = WindowIcon();
         Loaded += (_, _) => _ = PingAllAsync();
@@ -71,7 +73,7 @@ public partial class MainWindow : Window
             Dispatcher.InvokeAsync(() => AppendLog(e.IsAvailable ? "Сеть Windows: доступна" : "Сеть Windows: ПРОПАЛА"));
 
         LogFile.Rotate();
-        AppendLog(autoConnect ? "Клиент запущен (автозапуск)" : "Клиент запущен");
+        AppendLog($"Клиент запущен, версия {AppInfo.Version}" + (autoConnect ? " (автозапуск)" : ""));
         RefreshList();
         InitTray();
 
@@ -99,6 +101,8 @@ public partial class MainWindow : Window
     private void InitTray()
     {
         var menu = new System.Windows.Forms.ContextMenuStrip();
+        menu.Items.Add(new System.Windows.Forms.ToolStripMenuItem($"VPN-клиент {AppInfo.Version}") { Enabled = false });
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         menu.Items.Add("Открыть", null, (_, _) => ShowWindow());
         menu.Items.Add("Папка журналов", null, (_, _) =>
         {
@@ -111,7 +115,7 @@ public partial class MainWindow : Window
         _tray = new System.Windows.Forms.NotifyIcon
         {
             Icon = IconArt.TrayIcon(false),
-            Text = "VPN-клиент",
+            Text = $"VPN-клиент {AppInfo.Version}",
             Visible = true,
             ContextMenuStrip = menu,
         };
@@ -257,7 +261,8 @@ public partial class MainWindow : Window
         if (_trayConnect != null) _trayConnect.Text = off ? "Подключить" : "Отключить";
         if (_tray != null)
         {
-            _tray.Text = v == View.On ? $"VPN: {Trim(_current?.Name, 40)}" : off ? "VPN-клиент: отключено" : "VPN-клиент: подключение…";
+            _tray.Text = v == View.On ? $"VPN {AppInfo.Version}: {Trim(_current?.Name, 40)}"
+                       : off ? $"VPN-клиент {AppInfo.Version}: отключено" : $"VPN-клиент {AppInfo.Version}: подключение…";
             var old = _tray.Icon;
             _tray.Icon = IconArt.TrayIcon(v == View.On);
             old?.Dispose();

@@ -24,7 +24,11 @@
                     <TextBlock x:Name="StatusPillText" Text="Отключено" FontSize="12" Foreground="{StaticResource Muted}"/>
                 </StackPanel>
             </Border>
-            <TextBlock Text="VPN" FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="VPN" FontSize="22" FontWeight="Bold" VerticalAlignment="Center"/>
+                <TextBlock x:Name="VersionText" FontSize="12" Foreground="{StaticResource Muted}" VerticalAlignment="Bottom"
+                           Margin="8,0,0,4" ToolTip="Версия приложения"/>
+            </StackPanel>
         </DockPanel>
 
         <!-- кнопка подключения -->

@@ -87,8 +87,10 @@ public class State
 /// <summary>Состояние хранится в %APPDATA%\VpnClient\state.dat, зашифровано DPAPI (только этот пользователь Windows).</summary>
 public static class Store
 {
-    public static readonly string Dir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "VpnClient");
+    // VPNCLIENT_DATA_DIR переносит данные, журналы и временные конфиги в другую папку (тесты, портативный запуск)
+    public static readonly string Dir = Environment.GetEnvironmentVariable("VPNCLIENT_DATA_DIR") is { Length: > 0 } custom
+        ? custom
+        : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "VpnClient");
     private static string FilePath => Path.Combine(Dir, "state.dat");
 
     public static State Load()

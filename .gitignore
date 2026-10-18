@@ -29,3 +29,7 @@ xray.json
 
 # старая версия правил Shadowrocket (с ошибкой GEOIP) — заменена Shadowrocket-v2.conf
 mobile/Shadowrocket-как-на-ПК.conf
+
+# локальные скрипты установки на этом ПК (личные пути)
+install-*.ps1
+install-*-log.txt
