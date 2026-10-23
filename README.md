@@ -14,6 +14,9 @@ Powered by [sing-box](https://github.com/SagerNet/sing-box) and [Xray-core](http
 Windows may show "Windows protected your PC" because the app is not code-signed.
 Click **More info → Run anyway**. No .NET installation is required, and the cores are bundled (`core` folder).
 
+**Unblock the archive before unzipping:** right-click the `.zip` → *Properties* → tick **Unblock** → OK. Otherwise Windows marks every
+extracted file (including the cores) as downloaded from the internet, and SmartScreen or an antivirus may refuse to start them.
+
 ## Supported protocols
 
 | Protocol | Link | Notes |
@@ -37,14 +40,34 @@ Every protocol has been tested end to end against local test servers (link → c
 - Import: links, subscriptions (plain text and base64), QR code of a node for the phone.
 - Russian sites direct (banks, marketplaces and government sites don't see the VPN) — a switch.
 - Ad and tracker blocking at the DNS level.
-- Split tunneling: programs and sites can go "direct" or "always through the VPN".
-- Live speed, traffic and real latency through the VPN; latency to the servers in the list.
+- Split tunneling in the **Routes** window: type a site (a full URL, IP or subnet also works) and press **Direct** or **Through VPN**;
+  flip or delete rules in one click, copy the whole list and paste it on another computer. Programs can go direct, or (TUN, experimental)
+  *only the listed programs* go through the VPN.
+- Live speed and traffic; **latency through the VPN** (real HTTP round trip) and ping to the server shown separately.
+- Small screens: the window fits the work area (1366×768 and up), scrolls when needed and remembers its size and position.
+- Clear start-up errors: if Windows or an antivirus blocks a core, the client says so and what to do instead of a bare error code.
+- **Copy support report** and **Report a problem** (Log and support section): a report with personal data (addresses, links, node names,
+  your user name) removed is copied to the clipboard.
 - Auto-recovery: reconnect, switch to another node, react to sleep and wake-up.
 - Autostart at Windows sign-in (a Task Scheduler job with admin rights, no UAC prompt), lives in the tray.
 - Multiplexing (mux) is enabled for VLESS via Xray: dozens of application connections share a few TCP connections to
   the server. Without it, servers and ISPs that limit new connections stall most requests in TUN mode.
 - Log files (`%APPDATA%\VpnClient\logs`, kept for 7 days).
 
+## Troubleshooting
+
+If it does not connect, open **Log and support** at the bottom of the window first: the client writes the reason there.
+
+| Symptom | Likely cause and fix |
+|---|---|
+| Red banner "cannot start the core" | An antivirus or Windows removed/blocked `core\sing-box.exe` or `core\xray.exe`. Add the program folder to the antivirus exclusions, unblock the archive (see Install) and unzip again. |
+| Error code 225 / 226 | The antivirus considered the core a virus. Same fix as above. |
+| Error code 5 (access denied) | The folder is protected (Controlled Folder Access, a corporate policy) or the file is blocked. Move the program to e.g. `C:\Tools\Vpn`. |
+| Connects, but nothing loads, latency about 1000 ms | Another VPN or proxy is running at the same time (Happ, Hiddify, Zapret, a browser extension): quit it. Try the other mode (system proxy ↔ TUN) and another node. |
+| Only some sites work in TUN | Check **latency through the VPN**. If it is high, the server or provider limits new connections: use a node with multiplexing (VLESS through Xray) or another server. |
+| A site that must work directly does not open | Add it in **Routes** → **Direct**, then **Save and reconnect**. |
+
+If it still fails, press **Report a problem**: a page opens and the (anonymised) report is already on your clipboard, just paste it.
 ## Build from source
 
 Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) and Windows 10/11 x64.
@@ -58,7 +81,7 @@ app\VpnClient.exe
 A self-contained archive (no .NET needed on the target machine):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 4.3
+powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 4.4
 ```
 
 ## Where data is stored
