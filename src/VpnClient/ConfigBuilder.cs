@@ -133,29 +133,68 @@ public static class ConfigBuilder
 
         rules.Add(Route("ip_is_private", true, "direct"));
 
-        // программы напрямую (игры) — со всем их UDP, до блока QUIC
-        if (o.DirectApps.Length > 0)
-            rules.Add(Route("process_name", Arr(o.DirectApps), "direct"));
+        // свои списки сайтов: домены (с поддоменами) и IP/подсети
+        string[] proxyDomains = o.ProxySites.Where(s => !RouteRules.IsIpRule(s)).ToArray();
+        string[] proxyIps = o.ProxySites.Where(RouteRules.IsIpRule).Select(RouteRules.AsCidr).ToArray();
+        string[] directDomains = o.DirectSites.Where(s => !RouteRules.IsIpRule(s)).ToArray();
+        string[] directIps = o.DirectSites.Where(RouteRules.IsIpRule).Select(RouteRules.AsCidr).ToArray();
 
-        // QUIC (UDP 443) режем для всех сайтов — браузер сразу уходит на TCP.
-        // Иначе Chrome подвисает на QUIC (YouTube через туннель, Ozon и др. напрямую).
-        rules.Add(new JsonObject { ["network"] = "udp", ["port"] = 443, ["action"] = "reject" });
+        // «только выбранные программы через VPN» работает лишь в TUN и лишь при непустом списке:
+        // в режиме системного прокси остальные программы всё равно идут через прокси, а пустой список отправил бы весь трафик мимо VPN
+        bool onlyApps = o.AppsOnlyViaVpn && mode == Mode.Tun && o.DirectApps.Length > 0;
 
-        // свои списки: «через VPN» важнее остальных правил о сайтах
-        if (o.ProxySites.Length > 0)
+        void ProxySitesRules(bool scopedQuicReject)
         {
-            dnsRules.Add(new JsonObject { ["domain_suffix"] = Arr(o.ProxySites), ["action"] = "route", ["server"] = "dns-remote" });
-            rules.Add(Route("domain_suffix", Arr(o.ProxySites), "proxy"));
+            if (proxyDomains.Length > 0)
+                dnsRules.Add(new JsonObject { ["domain_suffix"] = Arr(proxyDomains), ["action"] = "route", ["server"] = "dns-remote" });
+            if (scopedQuicReject)   // QUIC в туннель не пускаем и в режиме «только выбранные программы»
+            {
+                if (proxyDomains.Length > 0) rules.Add(new JsonObject { ["domain_suffix"] = Arr(proxyDomains), ["network"] = "udp", ["port"] = 443, ["action"] = "reject" });
+                if (proxyIps.Length > 0) rules.Add(new JsonObject { ["ip_cidr"] = Arr(proxyIps), ["network"] = "udp", ["port"] = 443, ["action"] = "reject" });
+            }
+            if (proxyDomains.Length > 0) rules.Add(Route("domain_suffix", Arr(proxyDomains), "proxy"));
+            if (proxyIps.Length > 0) rules.Add(Route("ip_cidr", Arr(proxyIps), "proxy"));
         }
-        if (o.DirectSites.Length > 0)
+        void DirectSitesRules()
         {
-            dnsRules.Add(new JsonObject { ["domain_suffix"] = Arr(o.DirectSites), ["action"] = "route", ["server"] = "dns-local" });
-            rules.Add(Route("domain_suffix", Arr(o.DirectSites), "direct"));
+            if (directDomains.Length > 0)
+            {
+                dnsRules.Add(new JsonObject { ["domain_suffix"] = Arr(directDomains), ["action"] = "route", ["server"] = "dns-local" });
+                rules.Add(Route("domain_suffix", Arr(directDomains), "direct"));
+            }
+            if (directIps.Length > 0) rules.Add(Route("ip_cidr", Arr(directIps), "direct"));
         }
-        if (ruDirect)
+        void RuRules()
         {
+            if (!ruDirect) return;
             dnsRules.Add(new JsonObject { ["domain_suffix"] = Ru(), ["action"] = "route", ["server"] = "dns-local" });
             rules.Add(Route("domain_suffix", Ru(), "direct"));
+        }
+
+        if (!onlyApps)
+        {
+            // программы напрямую (игры) — со всем их UDP, до блока QUIC
+            if (o.DirectApps.Length > 0)
+                rules.Add(Route("process_name", Arr(o.DirectApps), "direct"));
+
+            // QUIC (UDP 443) режем для всех сайтов — браузер сразу уходит на TCP.
+            // Иначе Chrome подвисает на QUIC (YouTube через туннель, Ozon и др. напрямую).
+            rules.Add(new JsonObject { ["network"] = "udp", ["port"] = 443, ["action"] = "reject" });
+
+            // «через VPN» важнее остальных правил о сайтах
+            ProxySitesRules(scopedQuicReject: false);
+            DirectSitesRules();
+            RuRules();
+        }
+        else
+        {
+            // всё идёт напрямую, кроме перечисленных программ и сайтов «всегда через VPN»
+            ProxySitesRules(scopedQuicReject: true);
+            DirectSitesRules();
+            RuRules();
+            rules.Add(new JsonObject { ["process_name"] = Arr(o.DirectApps), ["network"] = "udp", ["port"] = 443, ["action"] = "reject" });
+            rules.Add(Route("process_name", Arr(o.DirectApps), "proxy"));
+            cfg["route"]!["final"] = "direct";
         }
 
         return cfg.ToJsonString(Pretty);
@@ -170,24 +209,5 @@ public record BuildOptions(
     string[] ProxySites,
     string? AdsRuleSetPath,
     int ClashPort,
-    string ClashSecret)
-{
-    /// <summary>Домены: без «*.», «https://», пути; в нижнем регистре.</summary>
-    public static string[] CleanSites(IEnumerable<string> xs) =>
-        xs.Select(x =>
-          {
-              x = x.Trim().ToLowerInvariant();
-              int i = x.IndexOf("://", StringComparison.Ordinal);
-              if (i >= 0) x = x[(i + 3)..];
-              x = x.Split('/')[0].TrimStart('*', '.');
-              return x;
-          })
-          .Where(x => x.Length > 0 && !x.StartsWith('#')).Distinct().ToArray();
-
-    /// <summary>Программы: только имя exe, регистр сохраняем (sing-box сравнивает как есть).</summary>
-    public static string[] CleanApps(IEnumerable<string> xs) =>
-        xs.Select(x => System.IO.Path.GetFileName(x.Trim().Trim('"')))
-          .Where(x => x.Length > 0 && !x.StartsWith('#'))
-          .Select(x => x.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? x : x + ".exe")
-          .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-}
+    string ClashSecret,
+    bool AppsOnlyViaVpn = false);

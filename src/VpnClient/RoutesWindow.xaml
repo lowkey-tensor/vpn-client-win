@@ -1,78 +1,137 @@
 <Window x:Class="VpnClient.RoutesWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Маршруты" Width="460" Height="700" MinHeight="520"
+        Title="Маршруты" Width="460" Height="740" MinWidth="380" MinHeight="420"
         Background="{StaticResource Bg}" Foreground="{StaticResource Text}" FontSize="14"
         FontFamily="Segoe UI Variable Text, Segoe UI"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
     <Window.Resources>
-        <Style x:Key="ListBox" TargetType="TextBox">
-            <Setter Property="AcceptsReturn" Value="True"/>
-            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
-            <Setter Property="Background" Value="#0A0C10"/>
-            <Setter Property="Foreground" Value="{StaticResource Text}"/>
-            <Setter Property="CaretBrush" Value="{StaticResource Text}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
-            <Setter Property="FontFamily" Value="Consolas"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Padding" Value="6"/>
-            <Setter Property="Margin" Value="0,6,0,0"/>
-        </Style>
         <Style x:Key="Hint" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource Muted}"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
+        <Style x:Key="Small" TargetType="Button" BasedOn="{StaticResource Btn}">
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
     </Window.Resources>
-    <Grid Margin="18">
+    <Grid Margin="18,14,18,14">
         <Grid.RowDefinitions>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Background="{StaticResource Card}" CornerRadius="12" Padding="14,10" Margin="0,0,0,10">
-            <DockPanel>
-                <DockPanel DockPanel.Dock="Top">
-                    <Button DockPanel.Dock="Right" Style="{StaticResource Btn}" Padding="10,5" VerticalAlignment="Top" FontSize="13"
-                            Content="Выбрать…" ToolTip="Выбрать exe-файл программы" Click="OnPickApp"/>
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="Маршруты" FontSize="22" FontWeight="Bold"/>
+            <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,0"
+                       Text="Что идёт через VPN, а что напрямую. Если сайт есть в обоих списках, «через VPN» важнее."/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,12,0,10" PanningMode="VerticalOnly">
+            <StackPanel>
+                <!-- сайты -->
+                <Border Background="{StaticResource Card}" CornerRadius="12" Padding="14,12" Margin="0,0,0,10">
                     <StackPanel>
-                        <TextBlock Text="Программы напрямую" FontWeight="SemiBold"/>
-                        <TextBlock Style="{StaticResource Hint}" Text="Мимо VPN, например игры. Только режим TUN."/>
+                        <TextBlock Text="Сайты" FontWeight="SemiBold"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,2,0,8"
+                                   Text="Адрес включает все поддомены. Можно вставить ссылку целиком, IP-адрес или подсеть (1.2.3.0/24)."/>
+                        <TextBox x:Name="SiteBox" Style="{StaticResource Input}" Height="38" Tag="сайт.ру, https://… или 1.2.3.4" KeyDown="OnSiteKey"/>
+                        <UniformGrid Columns="2" Margin="0,8,0,0">
+                            <Button Style="{StaticResource Btn}" Padding="0,8" Margin="0,0,4,0" Content="＋ Напрямую (без VPN)" Click="OnAddDirect"
+                                    ToolTip="Сайт откроется с вашего обычного IP"/>
+                            <Button Style="{StaticResource AccentBtn}" Padding="0,8" Margin="4,0,0,0" Content="＋ Через VPN" Click="OnAddVpn"
+                                    ToolTip="Сайт всегда пойдёт через VPN"/>
+                        </UniformGrid>
+                        <TextBlock x:Name="SiteError" Foreground="#FF8A8A" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" Visibility="Collapsed"/>
+                        <ItemsControl x:Name="SitesList" Margin="0,10,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#11151B" CornerRadius="8" Padding="10,4,4,4" Margin="0,0,0,6">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border CornerRadius="6" Padding="7,3" VerticalAlignment="Center" Background="{Binding BadgeBrush}">
+                                                <TextBlock Text="{Binding Badge}" FontSize="11" FontWeight="Bold" Foreground="White"/>
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="{Binding Value}" Margin="10,0,6,0" VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding Value}"/>
+                                            <Button Grid.Column="2" Style="{StaticResource QrBtn}" Tag="{Binding}" Click="OnFlip" ToolTip="Переключить: напрямую ⇄ через VPN" Content="⇄"/>
+                                            <Button Grid.Column="3" Style="{StaticResource IconBtn}" Tag="{Binding}" Click="OnDeleteSite" ToolTip="Удалить правило" Content="✕"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock x:Name="EmptySites" Style="{StaticResource Hint}" Margin="0,10,0,0" Text="Правил для сайтов пока нет."/>
                     </StackPanel>
-                </DockPanel>
-                <TextBox x:Name="AppsBox" Style="{StaticResource ListBox}"/>
-            </DockPanel>
-        </Border>
+                </Border>
 
-        <Border Grid.Row="1" Background="{StaticResource Card}" CornerRadius="12" Padding="14,10" Margin="0,0,0,10">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Top">
-                    <TextBlock Text="Сайты напрямую" FontWeight="SemiBold"/>
-                    <TextBlock Style="{StaticResource Hint}" Text="Один домен на строку — включает и поддомены. Пример: sber.ru"/>
-                </StackPanel>
-                <TextBox x:Name="DirectBox" Style="{StaticResource ListBox}"/>
-            </DockPanel>
-        </Border>
-
-        <Border Grid.Row="2" Background="{StaticResource Card}" CornerRadius="12" Padding="14,10" Margin="0,0,0,10">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Top">
-                    <TextBlock Text="Сайты всегда через VPN" FontWeight="SemiBold"/>
-                    <TextBlock Style="{StaticResource Hint}" Text="Важнее остальных правил: например .ru-сайт, который нужен через VPN."/>
-                </StackPanel>
-                <TextBox x:Name="ProxyBox" Style="{StaticResource ListBox}"/>
-            </DockPanel>
-        </Border>
-
-        <DockPanel Grid.Row="3">
-            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                <Button Style="{StaticResource Btn}" Content="Отмена" Margin="0,0,8,0" IsCancel="True"/>
-                <Button Style="{StaticResource AccentBtn}" Content="Сохранить" Click="OnSave"/>
+                <!-- программы -->
+                <Border Background="{StaticResource Card}" CornerRadius="12" Padding="14,12">
+                    <StackPanel>
+                        <TextBlock Text="Программы" FontWeight="SemiBold"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,2,0,8"
+                                   Text="Работает только в режиме TUN. Выберите, как использовать список ниже."/>
+                        <Border Background="#11151B" CornerRadius="10" Padding="4">
+                            <UniformGrid Columns="2">
+                                <RadioButton x:Name="AppsDirectRb" Style="{StaticResource Segment}" Content="Эти — мимо VPN" IsChecked="True" Click="OnAppsMode"/>
+                                <RadioButton x:Name="AppsOnlyRb" Style="{StaticResource Segment}" Content="Только эти — через VPN" Click="OnAppsMode"/>
+                            </UniformGrid>
+                        </Border>
+                        <TextBlock x:Name="AppsHint" Style="{StaticResource Hint}" Margin="0,6,0,8"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="AppBox" Style="{StaticResource Input}" Height="38" Tag="имя.exe" KeyDown="OnAppKey"/>
+                            <Button Grid.Column="1" Style="{StaticResource Small}" Margin="8,0,0,0" Content="Добавить" Click="OnAddApp"/>
+                            <Button Grid.Column="2" Style="{StaticResource Small}" Margin="8,0,0,0" Content="Выбрать…" Click="OnPickApp" ToolTip="Выбрать exe-файл программы"/>
+                        </Grid>
+                        <TextBlock x:Name="AppError" Foreground="#FF8A8A" FontSize="12" TextWrapping="Wrap" Margin="0,6,0,0" Visibility="Collapsed"/>
+                        <ItemsControl x:Name="AppsList" Margin="0,10,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#11151B" CornerRadius="8" Padding="10,4,4,4" Margin="0,0,0,6">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Name}"/>
+                                            <Button Grid.Column="1" Style="{StaticResource IconBtn}" Tag="{Binding}" Click="OnDeleteApp" ToolTip="Удалить из списка" Content="✕"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock x:Name="EmptyApps" Style="{StaticResource Hint}" Margin="0,10,0,0" Text="Список программ пуст."/>
+                    </StackPanel>
+                </Border>
             </StackPanel>
-            <TextBlock Text="Применится при следующем подключении" Foreground="{StaticResource Muted}" FontSize="12"
-                       TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,12,0"/>
-        </DockPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2">
+            <TextBlock x:Name="Info" Style="{StaticResource Hint}" Margin="0,0,0,6" Visibility="Collapsed"/>
+            <UniformGrid Columns="2" Margin="0,0,0,8">
+                <Button Style="{StaticResource Small}" Padding="0,7" Margin="0,0,4,0" Content="Копировать список" Click="OnCopy" ToolTip="Весь список правил в буфер обмена — можно перенести на другой компьютер"/>
+                <Button Style="{StaticResource Small}" Padding="0,7" Margin="4,0,0,0" Content="Вставить из буфера" Click="OnPaste" ToolTip="Добавить правила из скопированного списка"/>
+            </UniformGrid>
+            <TextBlock x:Name="ApplyHint" Style="{StaticResource Hint}" Margin="0,0,0,8"
+                       Text="Применится при следующем подключении"/>
+            <WrapPanel HorizontalAlignment="Right">
+                <Button Style="{StaticResource Btn}" Content="Отмена" IsCancel="True" Margin="8,0,0,0"/>
+                <Button x:Name="SaveBtn" Style="{StaticResource AccentBtn}" Content="Сохранить" Click="OnSave" Margin="8,0,0,0"/>
+                <Button x:Name="SaveReconnectBtn" Style="{StaticResource AccentBtn}" Content="Сохранить и переподключить"
+                        Click="OnSaveReconnect" Margin="8,0,0,0" Visibility="Collapsed"/>
+            </WrapPanel>
+        </StackPanel>
     </Grid>
 </Window>

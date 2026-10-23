@@ -79,9 +79,15 @@ public class State
     public bool AdBlock { get; set; } = true;
     public bool AutoRecover { get; set; } = true;
     // раздельный туннель
-    public List<string> DirectApps { get; set; } = new();   // имена exe — мимо VPN
-    public List<string> DirectSites { get; set; } = new();  // домены — мимо VPN
-    public List<string> ProxySites { get; set; } = new();   // домены — всегда через VPN
+    public List<string> DirectApps { get; set; } = new();   // имена exe: мимо VPN или «только эти через VPN» (см. AppsMode)
+    public List<string> DirectSites { get; set; } = new();  // домены и IP — мимо VPN
+    public List<string> ProxySites { get; set; } = new();   // домены и IP — всегда через VPN
+    public AppsMode AppsMode { get; set; } = AppsMode.DirectList;
+    // положение и размер окна (запоминаем, чтобы на ноутбуке не подгонять каждый раз)
+    public double? WinLeft { get; set; }
+    public double? WinTop { get; set; }
+    public double? WinWidth { get; set; }
+    public double? WinHeight { get; set; }
 }
 
 /// <summary>Состояние хранится в %APPDATA%\VpnClient\state.dat, зашифровано DPAPI (только этот пользователь Windows).</summary>
@@ -101,7 +107,12 @@ public static class Store
             var raw = ProtectedData.Unprotect(File.ReadAllBytes(FilePath), null, DataProtectionScope.CurrentUser);
             return JsonSerializer.Deserialize<State>(Encoding.UTF8.GetString(raw)) ?? new State();
         }
-        catch { return new State(); }
+        catch
+        {
+            // не потерять узлы из-за нечитаемого файла: откладываем его в сторону, прежде чем начнётся новое состояние
+            try { if (File.Exists(FilePath)) File.Copy(FilePath, FilePath + ".bad", overwrite: true); } catch { }
+            return new State();
+        }
     }
 
     public static void Save(State s)
