@@ -39,6 +39,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         VersionText.Text = "v" + AppInfo.Version;
         Title = $"VPN-клиент {AppInfo.Version}";
+        ApplyGeometry();
         SourceInitialized += (_, _) => ApplyDark(this);
         Icon = WindowIcon();
         Loaded += (_, _) => _ = PingAllAsync();
@@ -75,7 +76,9 @@ public partial class MainWindow : Window
         LogFile.Rotate();
         AppendLog($"Клиент запущен, версия {AppInfo.Version}" + (autoConnect ? " (автозапуск)" : ""));
         RefreshList();
+        UpdateRoutesButton();
         InitTray();
+        _ = RunCoreSelfTestAsync();
 
         Closing += (_, e) =>
         {
@@ -86,6 +89,50 @@ public partial class MainWindow : Window
         };
 
         if (autoConnect) _ = AutoConnectAsync();
+    }
+
+    // ---- размер и положение окна (маленькие экраны) ----
+    private void ApplyGeometry()
+    {
+        var work = SystemParameters.WorkArea;
+        var (w, h) = WindowLayout.Fit(work, _state.WinWidth, _state.WinHeight);
+        Width = w; Height = h;
+        if (_state.WinLeft is double l && _state.WinTop is double t && WindowLayout.IsOnScreen(work, l, t, w, h)) { Left = l; Top = t; }
+        else { (Left, Top) = WindowLayout.Center(work, w, h); }
+    }
+
+    private void RememberGeometry()
+    {
+        if (WindowState != WindowState.Normal || double.IsNaN(Width) || double.IsNaN(Left) || Left < -10000) return;
+        _state.WinLeft = Left; _state.WinTop = Top; _state.WinWidth = Width; _state.WinHeight = Height;
+    }
+
+    private void OnNodeWheel(object s, MouseWheelEventArgs e)
+    {
+        // список узлов не прокручивается сам — колесо листает всю страницу
+        if (PageScroll.ScrollableHeight <= 0) return;
+        PageScroll.ScrollToVerticalOffset(PageScroll.VerticalOffset - e.Delta);
+        e.Handled = true;
+    }
+
+    // ---- проверка ядер при запуске ----
+    private async Task RunCoreSelfTestAsync()
+    {
+        var problems = await Task.Run(() => CoreRunner.SelfTestAsync());
+        if (problems.Count == 0)
+        {
+            AppendLog($"Ядра проверены: sing-box {CoreRunner.SingBoxVersion}, xray {CoreRunner.XrayVersion}");
+            return;
+        }
+        foreach (var p in problems) AppendLog("ВНИМАНИЕ: " + p);
+        ShowCoreProblem(string.Join("\n\n", problems));
+        Notify("Не удаётся запустить ядро VPN. Подробности в окне программы.", System.Windows.Forms.ToolTipIcon.Warning);
+    }
+
+    private void ShowCoreProblem(string text)
+    {
+        CoreWarningText.Text = text;
+        CoreWarning.Visibility = Visibility.Visible;
     }
 
     public static void ApplyDark(Window w)
@@ -104,6 +151,7 @@ public partial class MainWindow : Window
         menu.Items.Add(new System.Windows.Forms.ToolStripMenuItem($"VPN-клиент {AppInfo.Version}") { Enabled = false });
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
         menu.Items.Add("Открыть", null, (_, _) => ShowWindow());
+        menu.Items.Add("Маршруты…", null, (_, _) => Dispatcher.Invoke(() => { ShowWindow(); OnRoutes(this, new RoutedEventArgs()); }));
         menu.Items.Add("Папка журналов", null, (_, _) =>
         {
             System.IO.Directory.CreateDirectory(LogFile.Dir);
@@ -198,6 +246,7 @@ public partial class MainWindow : Window
         _state.RuDirect = RuBox.IsChecked == true;
         _state.AdBlock = AdBox.IsChecked == true;
         _state.AutoRecover = RecoverBox.IsChecked == true;
+        RememberGeometry();
         Store.Save(_state);
     }
 
@@ -241,13 +290,16 @@ public partial class MainWindow : Window
         StatsPanel.Visibility = v == View.On ? Visibility.Visible : Visibility.Collapsed;
 
         bool off = v == View.Off;
-        ModeProxy.IsEnabled = ModeTun.IsEnabled = RuBox.IsEnabled = AdBox.IsEnabled = RoutesBtn.IsEnabled = off;
+        ModeProxy.IsEnabled = ModeTun.IsEnabled = RuBox.IsEnabled = AdBox.IsEnabled = off;   // «Маршруты» открываются и при включённом VPN
         if (v == View.On)
         {
             _connectedAt = DateTime.Now;
+            _startHintShown = false;
             SubStatus.Text = _current?.Name ?? "";
             DownText.Text = UpText.Text = "0 Б/с";
-            TotalText.Text = RealPingText.Text = "";
+            TotalText.Text = "";
+            ServerPingText.Text = RealPingText.Text = "—";
+            ServerPingText.Foreground = RealPingText.Foreground = new Media.SolidColorBrush(Muted);
             _clock.Start();
             _health.Start();
         }
@@ -297,24 +349,56 @@ public partial class MainWindow : Window
     };
 
     // ---- автовосстановление ----
+    private bool _startHintShown;   // подсказку про «наплыв соединений» показываем один раз за подключение
+
+    private static readonly Media.Color Red = Media.Color.FromRgb(0xFF, 0x6B, 0x6B);
+
+    private static Media.Brush PingBrush(int ms, int good, int ok) =>
+        new Media.SolidColorBrush(ms < good ? Green : ms < ok ? Amber : Red);
+
+    private static async Task<int?> ServerPingAsync(NodeEntry? node)
+    {
+        try { return node?.Server is { } h && node.Port > 0 ? await Pinger.MeasureAsync(h, node.Port) : null; }
+        catch { return null; }
+    }
+
     private async Task HealthCheckAsync()
     {
         if (_clash == null || !_core.IsRunning || _connecting) return;
-        var d = await _clash.DelayAsync();
-        if (d is int ms)
+        var clash = _clash; var node = _current;
+
+        // проверка жизни — запрос по HTTPS (как раньше); «честный» отклик — короткий запрос без шифрования; плюс пинг до сервера
+        var https = clash.DelayAsync();
+        var http = clash.DelayAsync("http://www.gstatic.com/generate_204");
+        var server = ServerPingAsync(node);
+        await Task.WhenAll(https, http, server);
+        int? hs = https.Result, ht = http.Result, sp = server.Result;
+
+        if (sp is int s) { ServerPingText.Text = $"{s} мс"; ServerPingText.Foreground = PingBrush(s, 100, 250); }
+        else { ServerPingText.Text = "нет ответа"; ServerPingText.Foreground = new Media.SolidColorBrush(Muted); }
+
+        int? shown = ht ?? hs;   // если по HTTP не ответили, показываем число от запроса по HTTPS (оно больше — ставим «≈»)
+        if (shown is int ms)
         {
-            if (_healthFails > 0) AppendLog($"Связь через VPN восстановилась ({ms} мс)");
-            else if (++_healthOk % 20 == 1) AppendLog($"Пинг через VPN: {ms} мс"); // раз в ~10 минут — фон для разборов
+            string label = ht != null ? $"{ms} мс" : $"≈{ms} мс";
+            if (_healthFails > 0) AppendLog($"Связь через VPN восстановилась (отклик {ms} мс)");
+            else if (++_healthOk % 20 == 1)   // раз в ~10 минут — фон для разборов
+                AppendLog($"Отклик через VPN: {ms} мс, до сервера: {(sp is int s2 ? $"{s2} мс" : "нет ответа")}");
             _healthFails = 0;
             _recoverAttempts = 0;
-            RealPingText.Text = $"{ms} мс";
-            RealPingText.Foreground = new Media.SolidColorBrush(ms < 150 ? Green : ms < 400 ? Amber : Media.Color.FromRgb(0xFF, 0x6B, 0x6B));
+            RealPingText.Text = label;
+            RealPingText.Foreground = PingBrush(ms, 200, 500);
             return;
         }
         RealPingText.Text = "нет связи";
-        RealPingText.Foreground = new Media.SolidColorBrush(Media.Color.FromRgb(0xFF, 0x6B, 0x6B));
+        RealPingText.Foreground = new Media.SolidColorBrush(Red);
         _healthFails++;
         AppendLog($"Проверка связи через VPN не прошла ({_healthFails}/3)");
+        if (!_startHintShown && (DateTime.Now - _connectedAt).TotalSeconds < 120)
+        {
+            _startHintShown = true;
+            AppendLog("Подсказка: сразу после включения VPN многие программы (Telegram, браузер) открывают десятки соединений, и это может перегрузить сервер. Подождите минуту или перезапустите эти программы. Если не помогает — смотрите раздел «Если не подключается» в README.");
+        }
         if (_healthFails >= 3 && RecoverBox.IsChecked == true)
             await RecoverAsync("нет связи через VPN");
     }
@@ -476,13 +560,85 @@ public partial class MainWindow : Window
         if (e.Key == Key.Enter) OnAdd(s, e);
     }
 
-    private void OnRoutes(object s, RoutedEventArgs e)
+    private async void OnRoutes(object s, RoutedEventArgs e)
     {
-        if (new RoutesWindow(_state) { Owner = this }.ShowDialog() == true)
+        bool connected = _wantConnected && _core.IsRunning;
+        var win = new RoutesWindow(_state, connected) { Owner = IsVisible ? this : null };
+        if (win.ShowDialog() != true) return;
+        SaveState();
+        UpdateRoutesButton();
+        AppendLog($"Маршруты сохранены: сайтов напрямую {_state.DirectSites.Count}, через VPN {_state.ProxySites.Count}, программ {_state.DirectApps.Count} " +
+                  $"({(_state.AppsMode == AppsMode.OnlyListedViaVpn ? "только они через VPN" : "они мимо VPN")})");
+        if (win.ReconnectRequested && _wantConnected && _current != null && !_connecting)
         {
-            SaveState();
-            AppendLog($"Маршруты сохранены: программ напрямую {_state.DirectApps.Count}, сайтов напрямую {_state.DirectSites.Count}, через VPN {_state.ProxySites.Count}");
+            AppendLog("Переподключение с новыми маршрутами");
+            await ConnectAsync(_current);
         }
+    }
+
+    private void UpdateRoutesButton()
+    {
+        int n = _state.DirectSites.Count + _state.ProxySites.Count + _state.DirectApps.Count;
+        RoutesBtnText.Text = n > 0 ? $"Маршруты: сайты и программы · {n}" : "Маршруты: сайты и программы";
+    }
+
+    // ---- отчёт для поддержки ----
+    private ReportInfo MakeReportInfo()
+    {
+        bool on = _wantConnected && _core.IsRunning;
+        string? protocol = null; bool viaXray = false;
+        var node = _current ?? SelectedNode();
+        if (node != null)
+        {
+            protocol = node.Protocol;
+            try { viaXray = LinkParser.Parse(node.Link).Xray != null; } catch { }
+        }
+        var work = SystemParameters.WorkArea;
+        double scale = Media.VisualTreeHelper.GetDpi(this).DpiScaleX;
+        return new ReportInfo(
+            AppInfo.Version,
+            System.Runtime.InteropServices.RuntimeInformation.OSDescription,
+            (ModeTun.IsChecked == true ? "TUN" : "системный прокси") + (on ? ", подключено" : ", отключено"),
+            protocol, viaXray,
+            on ? ServerPingText.Text : null, on ? RealPingText.Text : null,
+            RuBox.IsChecked == true, AdBox.IsChecked == true, RecoverBox.IsChecked == true, AutoBox.IsChecked == true,
+            _state.DirectSites.Count, _state.ProxySites.Count, _state.DirectApps.Count,
+            _state.AppsMode == AppsMode.OnlyListedViaVpn ? "только они через VPN" : "они мимо VPN",
+            CoreRunner.SingBoxVersion, CoreRunner.XrayVersion,
+            $"{SystemParameters.PrimaryScreenWidth:0}×{SystemParameters.PrimaryScreenHeight:0}, рабочая область {work.Width:0}×{work.Height:0}, масштаб {scale * 100:0}%");
+    }
+
+    private string BuildReportText()
+    {
+        var lines = LogFile.Tail(80);
+        if (lines.Count == 0) lines = LogBox.Text.Split('\n', StringSplitOptions.RemoveEmptyEntries).TakeLast(80).Select(l => l.TrimEnd('\r')).ToList();
+        return ReportBuilder.Build(MakeReportInfo(), lines, _state.Nodes.Select(n => n.Name));
+    }
+
+    private bool CopyToClipboard(string text)
+    {
+        try { Clipboard.SetText(text); return true; }
+        catch (Exception ex) { AppendLog("Не удалось скопировать в буфер обмена: " + ex.Message); return false; }
+    }
+
+    private async void OnCopyReport(object s, RoutedEventArgs e)
+    {
+        if (!CopyToClipboard(BuildReportText())) return;
+        AppendLog("Отчёт для поддержки скопирован в буфер обмена (без ключей, ссылок и адресов).");
+        CopyReportBtn.Content = "Скопировано ✓";
+        await Task.Delay(2500);
+        CopyReportBtn.Content = "Скопировать отчёт";
+    }
+
+    private void OnReportIssue(object s, RoutedEventArgs e)
+    {
+        if (!CopyToClipboard(BuildReportText())) return;
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(ReportBuilder.IssueUrl(MakeReportInfo())) { UseShellExecute = true });
+            AppendLog("Открыта страница обращения на GitHub. Отчёт уже в буфере обмена — вставьте его (Ctrl+V) в текст обращения.");
+        }
+        catch (Exception ex) { AppendLog("Не удалось открыть браузер: " + ex.Message + ". Отчёт в буфере обмена — отправьте его вручную."); }
     }
 
     private void OnRecoverToggle(object s, RoutedEventArgs e) => SaveState();
@@ -542,10 +698,13 @@ public partial class MainWindow : Window
                 else AppendLog("Блок рекламы пока пропущен: список не скачался, попробую после подключения");
             }
 
+            bool onlyApps = _state.AppsMode == AppsMode.OnlyListedViaVpn;
+            if (onlyApps && mode != Mode.Tun) AppendLog("Режим «только выбранные программы через VPN» работает лишь в TUN — пока он не применяется, весь трафик идёт через VPN.");
+            else if (onlyApps && _state.DirectApps.Count == 0) AppendLog("Режим «только выбранные программы через VPN» включён, но список программ пуст — он не применяется.");
             var clash = new ClashApi();
             var opts = new BuildOptions(ips, RuBox.IsChecked == true,
                 _state.DirectApps.ToArray(), _state.DirectSites.ToArray(), _state.ProxySites.ToArray(),
-                ads, clash.Port, clash.Secret);
+                ads, clash.Port, clash.Secret, onlyApps);
             string cfg = ConfigBuilder.Build(p.Outbound, mode, opts);
 
             string? err = await Task.Run(() => CoreRunner.Check(cfg));
@@ -577,6 +736,16 @@ public partial class MainWindow : Window
             if (AdBox.IsChecked == true && RuleSets.AdsStale)
                 _ = RuleSets.UpdateAdsAsync(mode == Mode.SystemProxy ? $"http://127.0.0.1:{ConfigBuilder.ProxyPort}" : null);
             return true;
+        }
+        catch (CoreRunner.CoreStartException ex)
+        {
+            // ядро не запускается из-за Windows/антивируса: повторы автовосстановления тут бесполезны
+            AppendLog("Ошибка: " + ex.Message);
+            ShowCoreProblem(ex.Message);
+            _wantConnected = false;
+            _current = null;
+            SetView(View.Off);
+            return false;
         }
         catch (Exception ex)
         {

@@ -22,12 +22,79 @@ public class CoreRunner
     public static string SingBoxPath => Path.Combine(CoreDir, "sing-box.exe");
     public static string XrayPath => Path.Combine(CoreDir, "xray.exe");
 
+    // ---- понятные причины, когда Windows не даёт запустить ядро ----
+
+    /// <summary>Ошибка запуска ядра с объяснением на человеческом языке.</summary>
+    public sealed class CoreStartException : Exception
+    {
+        public CoreStartException(string message, Exception? inner = null) : base(message, inner) { }
+    }
+
+    /// <summary>Переводит ошибку Windows при запуске exe в понятную причину и подсказку, что делать.</summary>
+    public static string Explain(Exception ex, string exePath)
+    {
+        string name = Path.GetFileName(exePath);
+        string dir = Path.GetDirectoryName(exePath) ?? "";
+        int code = ex is System.ComponentModel.Win32Exception w ? w.NativeErrorCode : 0;
+        string reason = code switch
+        {
+            2 or 3 => $"файл «{name}» не найден — скорее всего, его удалил антивирус",
+            5 => "доступ к файлу запрещён — его блокирует антивирус или защита Windows",
+            193 => "файл повреждён или не подходит к этой Windows — скачайте архив заново",
+            225 or 226 => "антивирус заблокировал файл как «потенциально нежелательный»",
+            740 => "нужны права администратора",
+            786 or 1260 or 1261 or 4551 => "политика безопасности Windows (Smart App Control или AppLocker) запрещает запуск неподписанных программ",
+            _ => ex.Message,
+        };
+        bool blocked = code is 2 or 3 or 5 or 225 or 226 or 786 or 1260 or 1261 or 4551;
+        string hint = blocked
+            ? $" Что сделать: откройте «Защита Windows → Защита от вирусов → Журнал защиты», разрешите «{name}», добавьте папку «{dir}» в исключения и, если файл удалён, распакуйте архив программы заново."
+            : code == 193 ? " Проверьте контрольную сумму архива (файл .sha256 на странице релиза) и распакуйте его целиком." : "";
+        return $"Windows не дала запустить «{name}»: {reason}" + (code > 0 ? $" (код {code})." : ".") + hint;
+    }
+
+    // версии ядер для отчёта поддержки (заполняются самопроверкой)
+    public static string SingBoxVersion { get; private set; } = "?";
+    public static string XrayVersion { get; private set; } = "?";
+
+    /// <summary>Проверяет при запуске, что оба ядра на месте и запускаются. Пустой список — всё хорошо.</summary>
+    public static async Task<List<string>> SelfTestAsync()
+    {
+        var problems = new List<string>();
+        foreach (var (path, label) in new[] { (SingBoxPath, "sing-box"), (XrayPath, "xray") })
+        {
+            if (!File.Exists(path))
+            {
+                problems.Add($"Не найден core\\{label}.exe в папке «{Path.GetDirectoryName(path)}». Распакуйте архив программы целиком: папка core должна лежать рядом с VpnClient.exe. Если файла нет после распаковки, его удалил антивирус.");
+                continue;
+            }
+            try
+            {
+                var psi = new ProcessStartInfo(path, "version")
+                {
+                    UseShellExecute = false, CreateNoWindow = true,
+                    RedirectStandardOutput = true, RedirectStandardError = true,
+                };
+                using var pr = Process.Start(psi) ?? throw new InvalidOperationException("процесс не создан");
+                var outTask = pr.StandardOutput.ReadToEndAsync();
+                if (!pr.WaitForExit(15000)) { try { pr.Kill(true); } catch { } problems.Add($"«{label}.exe» не ответил за 15 секунд — возможно, антивирус проверяет файл."); continue; }
+                string first = ((await outTask).Split('\n').FirstOrDefault() ?? "").Trim();
+                if (pr.ExitCode != 0) { problems.Add($"«{label}.exe» завершился с ошибкой (код {pr.ExitCode}). Скачайте архив заново."); continue; }
+                string ver = first.Split(' ').FirstOrDefault(t => t.Length > 0 && char.IsDigit(t[0])) ?? first;
+                if (label == "sing-box") SingBoxVersion = ver; else XrayVersion = ver;
+            }
+            catch (Exception ex) { problems.Add(Explain(ex, path)); }
+        }
+        return problems;
+    }
+
     public void Start(string singboxJson, Mode mode, string? xrayJson = null)
     {
         if (IsRunning) throw new InvalidOperationException("Уже запущено");
-        if (!File.Exists(SingBoxPath)) throw new FileNotFoundException("Не найден sing-box.exe", SingBoxPath);
+        if (!File.Exists(SingBoxPath))
+            throw new CoreStartException($"Не найден core\\sing-box.exe в папке «{Path.GetDirectoryName(SingBoxPath)}». Распакуйте архив программы целиком (папка core должна лежать рядом с VpnClient.exe); если файла нет после распаковки, его удалил антивирус.");
         if (xrayJson != null && !File.Exists(XrayPath))
-            throw new FileNotFoundException("Для этого узла нужен Xray-core: не найден core\\xray.exe", XrayPath);
+            throw new CoreStartException($"Для этого узла нужен Xray-core, но core\\xray.exe не найден в папке «{Path.GetDirectoryName(XrayPath)}». Распакуйте архив целиком; если файла нет, его удалил антивирус.");
 
         Directory.CreateDirectory(Store.Dir);
 
@@ -77,7 +144,9 @@ public class CoreRunner
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
-        var p = Process.Start(psi) ?? throw new InvalidOperationException($"Не удалось запустить {exe}");
+        Process p;
+        try { p = Process.Start(psi) ?? throw new InvalidOperationException($"Не удалось запустить {exe}"); }
+        catch (System.ComponentModel.Win32Exception ex) { throw new CoreStartException(Explain(ex, exe), ex); }
         string tag = prefix == null ? "" : $"[{prefix}] ";
         p.OutputDataReceived += (_, e) => { if (e.Data != null) Log?.Invoke(tag + e.Data); };
         p.ErrorDataReceived += (_, e) => { if (e.Data != null) Log?.Invoke(tag + e.Data); };
@@ -115,10 +184,15 @@ public class CoreRunner
                 UseShellExecute = false, CreateNoWindow = true,
                 RedirectStandardOutput = true, RedirectStandardError = true,
             };
-            using var pr = Process.Start(psi)!;
-            string err = pr.StandardError.ReadToEnd() + pr.StandardOutput.ReadToEnd();
-            pr.WaitForExit();
-            return pr.ExitCode == 0 ? null : err.Trim();
+            Process pr;
+            try { pr = Process.Start(psi)!; }
+            catch (System.ComponentModel.Win32Exception ex) { throw new CoreStartException(Explain(ex, SingBoxPath), ex); }
+            using (pr)
+            {
+                string err = pr.StandardError.ReadToEnd() + pr.StandardOutput.ReadToEnd();
+                pr.WaitForExit();
+                return pr.ExitCode == 0 ? null : err.Trim();
+            }
         }
         finally { try { File.Delete(p); } catch { } }
     }

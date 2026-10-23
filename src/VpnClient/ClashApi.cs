@@ -76,13 +76,13 @@ public sealed class ClashApi : IDisposable
     }
 
     /// <summary>Задержка запроса через туннель (мс) или null, если связи нет.</summary>
-    public async Task<int?> DelayAsync()
+    public async Task<int?> DelayAsync(string testUrl = "https://www.gstatic.com/generate_204")
     {
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
             cts.CancelAfter(9000);
-            string url = Uri.EscapeDataString("https://www.gstatic.com/generate_204");
+            string url = Uri.EscapeDataString(testUrl);
             var j = JsonNode.Parse(await _http.GetStringAsync($"proxies/proxy/delay?timeout=7000&url={url}", cts.Token));
             return (int?)j?["delay"];
         }
