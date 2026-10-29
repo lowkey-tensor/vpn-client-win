@@ -51,6 +51,8 @@ public static class ConfigBuilder
 
     /// <summary>Программа лежит в папке игр Steam (любая библиотека, любой диск).</summary>
     public const string SteamGamesRegex = @"(?i)^.*\\steamapps\\common\\.*$";
+    /// <summary>Игры Steam, которые остаются в VPN (папка в steamapps\common): PEAK.</summary>
+    public static readonly string[] SteamViaVpnRegex = [@"(?i)^.*\\steamapps\\common\\PEAK\\.*$"];
     public static readonly string[] SteamClients = ["steam.exe", "steamwebhelper.exe", "steamservice.exe"];
 
     public static string Build(JsonObject outbound, Mode mode, BuildOptions o)
@@ -185,6 +187,8 @@ public static class ConfigBuilder
             // игры Steam (всё, что лежит в steamapps\common) и клиент Steam — напрямую; Roblox и прочее остаются в VPN
             if (o.SteamDirect && mode == Mode.Tun)
             {
+                // исключения из «Steam напрямую»: эти игры нужны через VPN (правило стоит раньше общего)
+                rules.Add(Route("process_path_regex", Arr(SteamViaVpnRegex), "proxy"));
                 rules.Add(Route("process_path_regex", Arr([SteamGamesRegex]), "direct"));
                 rules.Add(Route("process_name", Arr(SteamClients), "direct"));
             }

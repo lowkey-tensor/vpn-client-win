@@ -44,7 +44,7 @@ Every protocol has been tested end to end against local test servers (link → c
   flip or delete rules in one click, copy the whole list and paste it on another computer. Programs can go direct, or (TUN, experimental)
   *only the listed programs* go through the VPN.
 - **Steam games go direct** in TUN mode (everything under `steamapps`, plus the Steam client), so online games with anti-cheat see your real connection.
-  Roblox and other programs stay in the VPN. One switch in **Routes**.
+  Roblox, the game PEAK and other programs stay in the VPN. One switch in **Routes**.
 - Live speed and traffic; **latency through the VPN** (real HTTP round trip) and ping to the server shown separately.
 - Small screens: the window fits the work area (1366×768 and up), scrolls when needed and remembers its size and position.
 - Clear start-up errors: if Windows or an antivirus blocks a core, the client says so and what to do instead of a bare error code.
