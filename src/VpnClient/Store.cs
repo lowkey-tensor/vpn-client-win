@@ -83,6 +83,7 @@ public class State
     public List<string> DirectSites { get; set; } = new();  // домены и IP — мимо VPN
     public List<string> ProxySites { get; set; } = new();   // домены и IP — всегда через VPN
     public AppsMode AppsMode { get; set; } = AppsMode.DirectList;
+    public bool SteamDirect { get; set; } = true;           // игры Steam и его клиент — мимо VPN (только TUN)
     // положение и размер окна (запоминаем, чтобы на ноутбуке не подгонять каждый раз)
     public double? WinLeft { get; set; }
     public double? WinTop { get; set; }

@@ -53,8 +53,11 @@ public partial class RoutesWindow : Window
 
         if (connected)
         {
+            // VPN включён: правила применяются только после переподключения, поэтому оно — главная кнопка
             SaveReconnectBtn.Visibility = Visibility.Visible;
-            ApplyHint.Text = "Сейчас VPN включён";
+            SaveBtn.Style = (Style)FindResource("Btn");
+            SaveBtn.Content = "Только сохранить";
+            ApplyHint.Text = "Сейчас VPN включён: новые правила заработают после переподключения.";
         }
     }
 
@@ -66,6 +69,7 @@ public partial class RoutesWindow : Window
         foreach (var a in s.DirectApps) _apps.Add(new AppRuleVm(a));
         AppsOnlyRb.IsChecked = s.AppsMode == AppsMode.OnlyListedViaVpn;
         AppsDirectRb.IsChecked = AppsOnlyRb.IsChecked != true;
+        SteamBox.IsChecked = s.SteamDirect;
     }
 
     /// <summary>Текущее содержимое окна как состояние (для сохранения и копирования).</summary>
@@ -75,6 +79,7 @@ public partial class RoutesWindow : Window
         DirectSites = _sites.Where(r => !r.IsVpn).Select(r => r.Value).ToList(),
         DirectApps = _apps.Select(a => a.Name).ToList(),
         AppsMode = AppsOnlyRb.IsChecked == true ? AppsMode.OnlyListedViaVpn : AppsMode.DirectList,
+        SteamDirect = SteamBox.IsChecked == true,
     };
 
     private void RefreshEmpty()
@@ -202,6 +207,7 @@ public partial class RoutesWindow : Window
         _state.DirectSites = snap.DirectSites;
         _state.DirectApps = snap.DirectApps;
         _state.AppsMode = snap.AppsMode;
+        _state.SteamDirect = snap.SteamDirect;
     }
 
     private void OnSave(object s, RoutedEventArgs e) { Apply(); DialogResult = true; }

@@ -39,7 +39,8 @@ public static class ConfigBuilder
     /// <summary>Российские сайты — напрямую (Ozon, банки, Госуслуги не видят VPN).</summary>
     public static readonly string[] RuDomains =
     [
-        "ru", "su", "xn--p1ai" /* .рф */, "xn--d1acj3b" /* .дети */, "moscow", "tatar",
+        "ru", "su", "xn--p1ai" /* .рф */, "xn--d1acj3b" /* .дети */,
+        // «moscow» и «tatar» сюда не входят: сайты в этих зонах часто стоят на зарубежном хостинге, который провайдеры обрывают
         // российские сервисы на не-.ru доменах
         "yandex.net", "yandex.com", "yastatic.net", "yandexcloud.net", "ya.cc",
         "vk.com", "vk.me", "vkuser.net", "userapi.com", "vk-cdn.net", "vkuseraudio.net", "vkvideo.ru",
@@ -47,6 +48,10 @@ public static class ConfigBuilder
         "ozonusercontent.com", "ozone.ru", "wbbasket.ru", "wbstatic.net", "avito.st",
         "kaspersky.com", "1c.ru", "rutube.ru", "dzen.ru",
     ];
+
+    /// <summary>Программа лежит в папке игр Steam (любая библиотека, любой диск).</summary>
+    public const string SteamGamesRegex = @"(?i)^.*\\steamapps\\common\\.*$";
+    public static readonly string[] SteamClients = ["steam.exe", "steamwebhelper.exe", "steamservice.exe"];
 
     public static string Build(JsonObject outbound, Mode mode, BuildOptions o)
     {
@@ -177,6 +182,13 @@ public static class ConfigBuilder
             if (o.DirectApps.Length > 0)
                 rules.Add(Route("process_name", Arr(o.DirectApps), "direct"));
 
+            // игры Steam (всё, что лежит в steamapps\common) и клиент Steam — напрямую; Roblox и прочее остаются в VPN
+            if (o.SteamDirect && mode == Mode.Tun)
+            {
+                rules.Add(Route("process_path_regex", Arr([SteamGamesRegex]), "direct"));
+                rules.Add(Route("process_name", Arr(SteamClients), "direct"));
+            }
+
             // QUIC (UDP 443) режем для всех сайтов — браузер сразу уходит на TCP.
             // Иначе Chrome подвисает на QUIC (YouTube через туннель, Ozon и др. напрямую).
             rules.Add(new JsonObject { ["network"] = "udp", ["port"] = 443, ["action"] = "reject" });
@@ -210,4 +222,5 @@ public record BuildOptions(
     string? AdsRuleSetPath,
     int ClashPort,
     string ClashSecret,
-    bool AppsOnlyViaVpn = false);
+    bool AppsOnlyViaVpn = false,
+    bool SteamDirect = false);

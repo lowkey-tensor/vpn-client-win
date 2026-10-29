@@ -22,7 +22,8 @@ public sealed record ReportInfo(
     string AppsMode,
     string SingBoxVersion,
     string XrayVersion,
-    string Screen);
+    string Screen,
+    string NodeDetails = "");
 
 public static class ReportBuilder
 {
@@ -33,6 +34,42 @@ public static class ReportBuilder
     private static readonly Regex Ipv4 = new(@"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b", RegexOptions.Compiled);
     private static readonly Regex Ipv6 = new(@"\b(?:[0-9a-f]{1,4}:){4,7}[0-9a-f]{1,4}\b|(?<![0-9a-f:])(?:[0-9a-f]{1,4}:){1,6}:[0-9a-f:]*\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex LongToken = new(@"[A-Za-z0-9_\-+/=]{32,}", RegexOptions.Compiled);
+    // имена сайтов из ошибок ядра («open connection to host:443») по ним видно, что человек открывал, — в отчёт не попадают
+    private static readonly Regex SiteName = new(@"(?<=(?:connection to|lookup|resolve|exchange) )(?=[^\s:/\]]*[a-z])[^\s:/\]]+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>Несекретные параметры узла (защита, транспорт, Vision, мультиплексирование) — по ним видно, какая связка тормозит.</summary>
+    public static string DescribeNode(string link, bool viaXray)
+    {
+        try
+        {
+            int sch = link.IndexOf("://", StringComparison.Ordinal);
+            if (sch <= 0) return "";
+            string scheme = link[..sch].ToLowerInvariant();
+            if (scheme is not ("vless" or "trojan" or "vmess")) return "";
+            int qi = link.IndexOf('?');
+            if (qi < 0) return "";
+            string query = link[(qi + 1)..];
+            int hash = query.IndexOf('#'); if (hash >= 0) query = query[..hash];
+            var q = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var part in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+            {
+                int eq = part.IndexOf('=');
+                if (eq > 0) q[part[..eq]] = Uri.UnescapeDataString(part[(eq + 1)..].Replace('+', ' '));
+            }
+            static string Safe(string? v, string dflt) => v is { Length: > 0 and <= 32 } && Regex.IsMatch(v, @"^[A-Za-z0-9_.\-]+$") ? v.ToLowerInvariant() : dflt;
+            string transport = Safe(q.GetValueOrDefault("type"), "tcp");
+            string security = Safe(q.GetValueOrDefault("security"), "none");
+            string flow = Safe(q.GetValueOrDefault("flow"), "");
+            string enc = q.GetValueOrDefault("encryption") is { } e && e.StartsWith("mlkem", StringComparison.OrdinalIgnoreCase) ? "mlkem" : "";
+            bool mux = viaXray && transport is "tcp" or "ws" or "httpupgrade" && flow.Length == 0;
+            var sb = new StringBuilder($"защита={security}, транспорт={transport}");
+            if (flow.Length > 0) sb.Append($", flow={flow}");
+            if (enc.Length > 0) sb.Append($", шифрование={enc}");
+            sb.Append($", мультиплексирование={(mux ? "да" : "нет")}");
+            return sb.ToString();
+        }
+        catch { return ""; }
+    }
 
     /// <summary>
     /// Убирает из текста то, что нельзя показывать посторонним: имя учётной записи Windows, ссылки подключения,
@@ -46,6 +83,7 @@ public static class ReportBuilder
             s = s.Replace(name, "<узел>", StringComparison.OrdinalIgnoreCase);
         s = UserPath.Replace(s, "$1<user>");
         s = AnyLink.Replace(s, "<ссылка>");
+        s = SiteName.Replace(s, "<сайт>");
         s = Ipv4.Replace(s, "<ip>");
         s = Ipv6.Replace(s, "<ipv6>");
         s = LongToken.Replace(s, "<ключ>");
@@ -61,6 +99,7 @@ public static class ReportBuilder
         sb.AppendLine($"Экран: {i.Screen}");
         sb.AppendLine($"Режим: {i.Mode}");
         sb.AppendLine($"Протокол узла: {i.Protocol ?? "—"}{(i.ViaXray ? " (через Xray)" : "")}");
+        if (i.NodeDetails.Length > 0) sb.AppendLine($"Параметры узла: {i.NodeDetails}");
         sb.AppendLine($"Пинг до сервера: {i.ServerPing ?? "—"}; отклик через VPN: {i.Response ?? "—"}");
         sb.AppendLine($"Ядра: sing-box {i.SingBoxVersion}, xray {i.XrayVersion}");
         sb.AppendLine($"Настройки: РФ напрямую={Yn(i.RuDirect)}, блок рекламы={Yn(i.AdBlock)}, автовосстановление={Yn(i.AutoRecover)}, автозапуск={Yn(i.AutoStart)}");

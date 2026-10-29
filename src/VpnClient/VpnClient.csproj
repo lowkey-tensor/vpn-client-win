@@ -11,7 +11,7 @@
     <ApplicationIcon>app.ico</ApplicationIcon>
     <RootNamespace>VpnClient</RootNamespace>
     <AssemblyName>VpnClient</AssemblyName>
-    <Version>4.4.0</Version>
+    <Version>4.4.1</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 

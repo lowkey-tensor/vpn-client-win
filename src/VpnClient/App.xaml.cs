@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 
 namespace VpnClient;
@@ -6,6 +7,21 @@ public partial class App : Application
 {
     private static Mutex? _single;
     private const string ShowEventName = @"Local\VpnClient-show-window";
+
+    private static string? OtherInstancePath()
+    {
+        try
+        {
+            int me = Environment.ProcessId;
+            foreach (var p in System.Diagnostics.Process.GetProcessesByName("VpnClient"))
+            {
+                try { if (p.Id != me && p.MainModule?.FileName is { Length: > 0 } f) return f; } catch { }
+                finally { p.Dispose(); }
+            }
+        }
+        catch { }
+        return null;
+    }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -17,7 +33,15 @@ public partial class App : Application
         if (!first)
         {
             if (!auto)
+            {
+                // запущена копия из другой папки (например, из архива): тихо показать её окно — значит, человек не поймёт, почему «не то»
+                string? other = OtherInstancePath();
+                string me = Environment.ProcessPath ?? "";
+                if (other != null && me.Length > 0 && !string.Equals(Path.GetFullPath(other), Path.GetFullPath(me), StringComparison.OrdinalIgnoreCase))
+                    MessageBox.Show($"Клиент уже запущен из другой папки:\n{other}\n\nЭта копия не запустится, пока работает та. Закройте ту (значок в трее → «Выход»), затем запустите эту снова.",
+                        "VPN-клиент", MessageBoxButton.OK, MessageBoxImage.Information);
                 try { EventWaitHandle.OpenExisting(ShowEventName).Set(); } catch { }
+            }
             Shutdown();
             return;
         }

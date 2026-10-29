@@ -332,8 +332,11 @@ public partial class MainWindow : Window
             TotalText.Text = $"Σ {Bytes(tot.down + tot.up)}";
     }
 
+    private long _rate;   // последняя суммарная скорость, байт/с: при загрузке канала отклик растёт, это не поломка
+
     private void OnTraffic(long up, long down) => Dispatcher.InvokeAsync(() =>
     {
+        _rate = up + down;
         DownText.Text = Bytes(down) + "/с";
         UpText.Text = Bytes(up) + "/с";
         if (_tray != null && _current != null)
@@ -380,14 +383,16 @@ public partial class MainWindow : Window
         int? shown = ht ?? hs;   // если по HTTP не ответили, показываем число от запроса по HTTPS (оно больше — ставим «≈»)
         if (shown is int ms)
         {
+            bool loaded = _rate > 1_500_000;   // идёт большая загрузка: отклик и так вырастет
             string label = ht != null ? $"{ms} мс" : $"≈{ms} мс";
-            if (_healthFails > 0) AppendLog($"Связь через VPN восстановилась (отклик {ms} мс)");
+            string note = loaded ? " (под нагрузкой)" : "";
+            if (_healthFails > 0) AppendLog($"Связь через VPN восстановилась (отклик {ms} мс{note})");
             else if (++_healthOk % 20 == 1)   // раз в ~10 минут — фон для разборов
-                AppendLog($"Отклик через VPN: {ms} мс, до сервера: {(sp is int s2 ? $"{s2} мс" : "нет ответа")}");
+                AppendLog($"Отклик через VPN: {ms} мс{note}, до сервера: {(sp is int s2 ? $"{s2} мс" : "нет ответа")}");
             _healthFails = 0;
             _recoverAttempts = 0;
-            RealPingText.Text = label;
-            RealPingText.Foreground = PingBrush(ms, 200, 500);
+            RealPingText.Text = label + (loaded ? " · нагрузка" : "");
+            RealPingText.Foreground = loaded ? new Media.SolidColorBrush(Muted) : PingBrush(ms, 200, 500);
             return;
         }
         RealPingText.Text = "нет связи";
@@ -586,12 +591,13 @@ public partial class MainWindow : Window
     private ReportInfo MakeReportInfo()
     {
         bool on = _wantConnected && _core.IsRunning;
-        string? protocol = null; bool viaXray = false;
+        string? protocol = null; bool viaXray = false; string details = "";
         var node = _current ?? SelectedNode();
         if (node != null)
         {
             protocol = node.Protocol;
             try { viaXray = LinkParser.Parse(node.Link).Xray != null; } catch { }
+            details = ReportBuilder.DescribeNode(node.Link, viaXray);
         }
         var work = SystemParameters.WorkArea;
         double scale = Media.VisualTreeHelper.GetDpi(this).DpiScaleX;
@@ -605,7 +611,8 @@ public partial class MainWindow : Window
             _state.DirectSites.Count, _state.ProxySites.Count, _state.DirectApps.Count,
             _state.AppsMode == AppsMode.OnlyListedViaVpn ? "только они через VPN" : "они мимо VPN",
             CoreRunner.SingBoxVersion, CoreRunner.XrayVersion,
-            $"{SystemParameters.PrimaryScreenWidth:0}×{SystemParameters.PrimaryScreenHeight:0}, рабочая область {work.Width:0}×{work.Height:0}, масштаб {scale * 100:0}%");
+            $"{SystemParameters.PrimaryScreenWidth:0}×{SystemParameters.PrimaryScreenHeight:0}, рабочая область {work.Width:0}×{work.Height:0}, масштаб {scale * 100:0}%",
+            details);
     }
 
     private string BuildReportText()
@@ -704,7 +711,8 @@ public partial class MainWindow : Window
             var clash = new ClashApi();
             var opts = new BuildOptions(ips, RuBox.IsChecked == true,
                 _state.DirectApps.ToArray(), _state.DirectSites.ToArray(), _state.ProxySites.ToArray(),
-                ads, clash.Port, clash.Secret, onlyApps);
+                ads, clash.Port, clash.Secret, onlyApps, _state.SteamDirect);
+            if (_state.SteamDirect && mode == Mode.Tun && !onlyApps) AppendLog("Игры Steam и клиент Steam идут напрямую, мимо VPN (отключается в «Маршрутах»).");
             string cfg = ConfigBuilder.Build(p.Outbound, mode, opts);
 
             string? err = await Task.Run(() => CoreRunner.Check(cfg));

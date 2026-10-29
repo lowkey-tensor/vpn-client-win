@@ -43,6 +43,8 @@ Every protocol has been tested end to end against local test servers (link → c
 - Split tunneling in the **Routes** window: type a site (a full URL, IP or subnet also works) and press **Direct** or **Through VPN**;
   flip or delete rules in one click, copy the whole list and paste it on another computer. Programs can go direct, or (TUN, experimental)
   *only the listed programs* go through the VPN.
+- **Steam games go direct** in TUN mode (everything under `steamapps`, plus the Steam client), so online games with anti-cheat see your real connection.
+  Roblox and other programs stay in the VPN. One switch in **Routes**.
 - Live speed and traffic; **latency through the VPN** (real HTTP round trip) and ping to the server shown separately.
 - Small screens: the window fits the work area (1366×768 and up), scrolls when needed and remembers its size and position.
 - Clear start-up errors: if Windows or an antivirus blocks a core, the client says so and what to do instead of a bare error code.
@@ -60,6 +62,7 @@ If it does not connect, open **Log and support** at the bottom of the window fir
 
 | Symptom | Likely cause and fix |
 |---|---|
+| Message "the program was started from the archive" | You double-clicked `VpnClient.exe` inside the zip. Quit it (tray icon → Exit), unzip the archive fully (*Extract all…*) and run it from the new folder. |
 | Red banner "cannot start the core" | An antivirus or Windows removed/blocked `core\sing-box.exe` or `core\xray.exe`. Add the program folder to the antivirus exclusions, unblock the archive (see Install) and unzip again. |
 | Error code 225 / 226 | The antivirus considered the core a virus. Same fix as above. |
 | Error code 5 (access denied) | The folder is protected (Controlled Folder Access, a corporate policy) or the file is blocked. Move the program to e.g. `C:\Tools\Vpn`. |
@@ -81,7 +84,7 @@ app\VpnClient.exe
 A self-contained archive (no .NET needed on the target machine):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 4.4
+powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 4.4.1
 ```
 
 ## Where data is stored

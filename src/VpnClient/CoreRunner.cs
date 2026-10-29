@@ -30,9 +30,24 @@ public class CoreRunner
         public CoreStartException(string message, Exception? inner = null) : base(message, inner) { }
     }
 
+    /// <summary>Программу открыли двойным щелчком прямо внутри zip: Windows распаковала во временную папку только exe, без папки core.</summary>
+    public static bool RunFromArchive(string? exePath = null)
+    {
+        exePath ??= Environment.ProcessPath ?? "";
+        if (exePath.Contains(".zip", StringComparison.OrdinalIgnoreCase)) return true;
+        try { return exePath.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase); }
+        catch { return false; }
+    }
+
+    public const string FromArchiveMessage =
+        "Программа запущена прямо из архива, поэтому рядом с ней нет папки core. Закройте её (значок в трее → «Выход»), " +
+        "распакуйте zip целиком (правая кнопка на архиве → «Извлечь всё…») и запустите VpnClient.exe из получившейся папки.";
+
     /// <summary>Переводит ошибку Windows при запуске exe в понятную причину и подсказку, что делать.</summary>
     public static string Explain(Exception ex, string exePath)
     {
+        if (ex is System.ComponentModel.Win32Exception { NativeErrorCode: 2 or 3 } && RunFromArchive(exePath))
+            return FromArchiveMessage;
         string name = Path.GetFileName(exePath);
         string dir = Path.GetDirectoryName(exePath) ?? "";
         int code = ex is System.ComponentModel.Win32Exception w ? w.NativeErrorCode : 0;
@@ -65,6 +80,7 @@ public class CoreRunner
         {
             if (!File.Exists(path))
             {
+                if (RunFromArchive()) { if (!problems.Contains(FromArchiveMessage)) problems.Add(FromArchiveMessage); continue; }
                 problems.Add($"Не найден core\\{label}.exe в папке «{Path.GetDirectoryName(path)}». Распакуйте архив программы целиком: папка core должна лежать рядом с VpnClient.exe. Если файла нет после распаковки, его удалил антивирус.");
                 continue;
             }
@@ -91,6 +107,8 @@ public class CoreRunner
     public void Start(string singboxJson, Mode mode, string? xrayJson = null)
     {
         if (IsRunning) throw new InvalidOperationException("Уже запущено");
+        if ((!File.Exists(SingBoxPath) || (xrayJson != null && !File.Exists(XrayPath))) && RunFromArchive())
+            throw new CoreStartException(FromArchiveMessage);
         if (!File.Exists(SingBoxPath))
             throw new CoreStartException($"Не найден core\\sing-box.exe в папке «{Path.GetDirectoryName(SingBoxPath)}». Распакуйте архив программы целиком (папка core должна лежать рядом с VpnClient.exe); если файла нет после распаковки, его удалил антивирус.");
         if (xrayJson != null && !File.Exists(XrayPath))
