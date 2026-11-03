@@ -711,7 +711,7 @@ public partial class MainWindow : Window
             var clash = new ClashApi();
             var opts = new BuildOptions(ips, RuBox.IsChecked == true,
                 _state.DirectApps.ToArray(), _state.DirectSites.ToArray(), _state.ProxySites.ToArray(),
-                ads, clash.Port, clash.Secret, onlyApps, _state.SteamDirect);
+                ads, clash.Port, clash.Secret, onlyApps, _state.SteamDirect, p.Server);
             if (_state.SteamDirect && mode == Mode.Tun && !onlyApps) AppendLog("Игры Steam и клиент Steam идут напрямую, мимо VPN (отключается в «Маршрутах»).");
             string cfg = ConfigBuilder.Build(p.Outbound, mode, opts);
 

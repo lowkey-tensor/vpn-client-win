@@ -22,6 +22,13 @@ public static class ConfigBuilder
         ["version"] = "5",
     };
 
+    public const string XrayProcess = "xray.exe";
+
+    /// <summary>Узел идёт через Xray: sing-box отдаёт трафик в его socks-порт.</summary>
+    public static bool IsXrayChain(JsonObject outbound) =>
+        (string?)outbound["type"] == "socks" && (string?)outbound["server"] == "127.0.0.1"
+        && (int?)outbound["server_port"] == XrayPort;
+
     public static string BuildXray(JsonObject outbound) => new JsonObject
     {
         ["log"] = new JsonObject { ["loglevel"] = "warning", ["access"] = "none" },
@@ -124,8 +131,16 @@ public static class ConfigBuilder
         var rules = (JsonArray)cfg["route"]!["rules"]!;
         static JsonObject Route(string key, JsonNode val, string outb) => new() { [key] = val, ["action"] = "route", ["outbound"] = outb };
 
+        // адрес сервера задан доменом: узнаём его напрямую, иначе запрос уйдёт в ещё не поднятый туннель
+        if (o.ServerHost is { Length: > 0 } host && !System.Net.IPAddress.TryParse(host, out _))
+            dnsRules.Add(new JsonObject { ["domain"] = Arr([host]), ["action"] = "route", ["server"] = "dns-local" });
+
         rules.Add(new JsonObject { ["action"] = "sniff" });
         rules.Add(new JsonObject { ["protocol"] = "dns", ["action"] = "hijack-dns" });
+
+        // Xray ходит только к серверу узла: в TUN его трафик напрямую, даже если IP за доменом сменился
+        if (mode == Mode.Tun && IsXrayChain(outbound))
+            rules.Add(Route("process_name", Arr([XrayProcess]), "direct"));
 
         // реклама и трекеры
         if (o.AdsRuleSetPath != null)
@@ -227,4 +242,5 @@ public record BuildOptions(
     int ClashPort,
     string ClashSecret,
     bool AppsOnlyViaVpn = false,
-    bool SteamDirect = false);
+    bool SteamDirect = false,
+    string? ServerHost = null);
