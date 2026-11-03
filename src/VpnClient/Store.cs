@@ -23,10 +23,12 @@ public class NodeEntry : System.ComponentModel.INotifyPropertyChanged
             PropertyChanged?.Invoke(this, new(nameof(PingBrush)));
         }
     }
-    [JsonIgnore] public string PingText => _ping switch { null => "", -1 => "нет ответа", 0 => "…", var v => $"{v} мс" };
+    // UDP-узел (Hysteria2, TUIC) обычным пингом проверить нельзя: «нет ответа» у него ничего не значит
+    [JsonIgnore] public string PingText => _ping switch { null => "", -1 => IsUdp ? "без пинга" : "нет ответа", 0 => "…", var v => $"{v} мс" };
     [JsonIgnore] public Brush PingBrush => new SolidColorBrush(_ping switch
     {
         null or 0 => Color.FromRgb(0x8A, 0x93, 0xA3),
+        -1 when IsUdp => Color.FromRgb(0x8A, 0x93, 0xA3),
         -1 => Color.FromRgb(0xFF, 0x6B, 0x6B),
         < 100 => Color.FromRgb(0x2B, 0xD4, 0x7D),
         < 250 => Color.FromRgb(0xF5, 0xB7, 0x3B),
@@ -37,6 +39,7 @@ public class NodeEntry : System.ComponentModel.INotifyPropertyChanged
     public string Link { get; set; } = "";
     public string? Sub { get; set; }
     public string Protocol => LinkParser.Protocol(Link);
+    [JsonIgnore] public bool IsUdp => Failover.IsUdp(Protocol);
     public override string ToString() => $"{Name}  [{Protocol}]";
 
     // для карточки в списке

@@ -28,6 +28,7 @@ public partial class MainWindow : Window
 
     private readonly DispatcherTimer _clock = new() { Interval = TimeSpan.FromSeconds(2) };
     private readonly DispatcherTimer _health = new() { Interval = TimeSpan.FromSeconds(30) };
+    private readonly DispatcherTimer _subsTimer = new() { Interval = TimeSpan.FromSeconds(30) };
 
     private static readonly Media.Color Gray = Media.Color.FromRgb(0x3A, 0x41, 0x50);
     private static readonly Media.Color Amber = Media.Color.FromRgb(0xF5, 0xB7, 0x3B);
@@ -53,6 +54,9 @@ public partial class MainWindow : Window
 
         _clock.Tick += async (_, _) => await UpdateStatsAsync();
         _health.Tick += async (_, _) => await HealthCheckAsync();
+        // подписки обновляются сами: через полминуты после запуска (VPN уже поднят) и раз в 6 часов
+        _subsTimer.Tick += async (_, _) => { _subsTimer.Interval = TimeSpan.FromHours(6); await RefreshSubscriptionsAsync(); };
+        _subsTimer.Start();
 
         _core.Log += l => Dispatcher.Invoke(() => AppendLog(l));
         _core.Exited += () => Dispatcher.Invoke(OnCoreExited);
@@ -377,8 +381,9 @@ public partial class MainWindow : Window
         await Task.WhenAll(https, http, server);
         int? hs = https.Result, ht = http.Result, sp = server.Result;
 
+        string noAnswer = node?.IsUdp == true ? "не проверить (UDP)" : "нет ответа";
         if (sp is int s) { ServerPingText.Text = $"{s} мс"; ServerPingText.Foreground = PingBrush(s, 100, 250); }
-        else { ServerPingText.Text = "нет ответа"; ServerPingText.Foreground = new Media.SolidColorBrush(Muted); }
+        else { ServerPingText.Text = noAnswer; ServerPingText.Foreground = new Media.SolidColorBrush(Muted); }
 
         int? shown = ht ?? hs;   // если по HTTP не ответили, показываем число от запроса по HTTPS (оно больше — ставим «≈»)
         if (shown is int ms)
@@ -388,7 +393,7 @@ public partial class MainWindow : Window
             string note = loaded ? " (под нагрузкой)" : "";
             if (_healthFails > 0) AppendLog($"Связь через VPN восстановилась (отклик {ms} мс{note})");
             else if (++_healthOk % 20 == 1)   // раз в ~10 минут — фон для разборов
-                AppendLog($"Отклик через VPN: {ms} мс{note}, до сервера: {(sp is int s2 ? $"{s2} мс" : "нет ответа")}");
+                AppendLog($"Отклик через VPN: {ms} мс{note}, до сервера: {(sp is int s2 ? $"{s2} мс" : noAnswer)}");
             _healthFails = 0;
             _recoverAttempts = 0;
             RealPingText.Text = label + (loaded ? " · нагрузка" : "");
@@ -402,7 +407,9 @@ public partial class MainWindow : Window
         if (!_startHintShown && (DateTime.Now - _connectedAt).TotalSeconds < 120)
         {
             _startHintShown = true;
-            AppendLog("Подсказка: сразу после включения VPN многие программы (Telegram, браузер) открывают десятки соединений, и это может перегрузить сервер. Подождите минуту или перезапустите эти программы. Если не помогает — смотрите раздел «Если не подключается» в README.");
+            AppendLog(node?.IsUdp == true
+                ? $"Подсказка: «{node.Name}» работает по UDP ({node.Protocol}), а мобильные операторы и часть провайдеров UDP режут. Если связи нет, выберите узел на VLESS или Trojan — автовосстановление тоже сразу перейдёт на такой."
+                : "Подсказка: сразу после включения VPN многие программы (Telegram, браузер) открывают десятки соединений, и это может перегрузить сервер. Подождите минуту или перезапустите эти программы. Если не помогает — смотрите раздел «Если не подключается» в README.");
         }
         if (_healthFails >= 3 && RecoverBox.IsChecked == true)
             await RecoverAsync("нет связи через VPN");
@@ -424,7 +431,7 @@ public partial class MainWindow : Window
         AppendLog("Отключено");
     }
 
-    /// <summary>Переподключение: дважды тот же узел, потом — следующий рабочий.</summary>
+    /// <summary>Переподключение: тот же узел (UDP — один раз, остальные — дважды), потом — следующий рабочий.</summary>
     private async Task RecoverAsync(string reason, bool sameNodeOnly = false)
     {
         if (_connecting || !_wantConnected) return;
@@ -432,7 +439,7 @@ public partial class MainWindow : Window
         _healthFails = 0;
 
         var node = _current ?? SelectedNode();
-        if (!sameNodeOnly && _recoverAttempts > 2 && NextNode(node) is { } next)
+        if (!sameNodeOnly && _recoverAttempts > Failover.SameNodeTries(node) && NextNode(node) is { } next)
         {
             AppendLog($"Узел «{node?.Name}» не отвечает — переключаюсь на «{next.Name}»");
             Notify($"Переключился на «{next.Name}»");
@@ -452,12 +459,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Следующий по кругу узел, предпочитая отвечающие на пинг.</summary>
-    private NodeEntry? NextNode(NodeEntry? cur)
-    {
-        var others = _state.Nodes.Where(n => n != cur).ToList();
-        if (others.Count == 0) return null;
-        return others.Where(n => n.Ping is > 0).OrderBy(n => n.Ping).FirstOrDefault() ?? others[0];
-    }
+    private NodeEntry? NextNode(NodeEntry? cur) => Failover.Next(_state.Nodes, cur);
 
     // ---- добавление ----
     private async void OnAdd(object s, RoutedEventArgs e)
@@ -495,28 +497,67 @@ public partial class MainWindow : Window
         catch (Exception ex) { AppendLog($"Пропущена ссылка: {ex.Message}"); }
     }
 
-    private async Task LoadSubscription(string url)
+    private static async Task<string> FetchSubscription(string url)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         req.Headers.UserAgent.ParseAdd("v2rayN/6.0");
-        string body = await (await Http.SendAsync(req)).EnsureSuccessStatusCode().Content.ReadAsStringAsync();
+        return await (await Http.SendAsync(req)).EnsureSuccessStatusCode().Content.ReadAsStringAsync();
+    }
+
+    private async Task LoadSubscription(string url)
+    {
+        string body;
+        try { body = await FetchSubscription(url); }
+        catch (Exception first)
+        {
+            // адрес подписки заблокирован — пробуем тот же путь на доменах других входов из этой подписки
+            body = "";
+            foreach (var mirror in Failover.MirrorUrls(url, _state.Nodes))
+            {
+                try
+                {
+                    body = await FetchSubscription(mirror);
+                    AppendLog($"Подписка по основному адресу недоступна, загружена через {new Uri(mirror).Host}");
+                    break;
+                }
+                catch { }
+            }
+            if (body == "") throw new HttpRequestException(first.Message, first);
+        }
         var links = LinkParser.SplitSubscription(body).ToList();
+        // пустой ответ (подписку выключили в панели, сервер отдал заглушку) не должен стирать рабочие узлы
+        if (links.Count == 0 && _state.Nodes.Any(n => n.Sub == url))
+        {
+            AppendLog("Подписка вернула пустой список — оставляю прежние узлы");
+            return;
+        }
         _state.Nodes.RemoveAll(n => n.Sub == url && n != _current);
         foreach (var l in links) AddLink(l, url);
         AppendLog($"Подписка обновлена: {_state.Nodes.Count(n => n.Sub == url)} узл.");
     }
 
-    private async void OnRefresh(object s, RoutedEventArgs e)
+    private bool _refreshing;
+
+    /// <summary>Обновить все подписки: по кнопке, при запуске и раз в 6 часов.</summary>
+    private async Task RefreshSubscriptionsAsync()
     {
-        foreach (var url in _state.Subs.ToList())
+        if (_refreshing || _state.Subs.Count == 0) return;
+        _refreshing = true;
+        try
         {
-            try { await LoadSubscription(url); }
-            catch (Exception ex) { AppendLog("Ошибка подписки: " + ex.Message); }
+            foreach (var url in _state.Subs.ToList())
+            {
+                try { await LoadSubscription(url); }
+                catch (Exception ex) { AppendLog("Ошибка подписки: " + ex.Message); }
+            }
+            SaveState();
+            RefreshList();
+            _ = PingAllAsync();
         }
-        SaveState();
-        RefreshList();
-        _ = PingAllAsync();
+        finally { _refreshing = false; }
     }
+
+    private async void OnRefresh(object s, RoutedEventArgs e) => await RefreshSubscriptionsAsync();
 
     private async void OnSelect(object s, System.Windows.Controls.SelectionChangedEventArgs e)
     {
