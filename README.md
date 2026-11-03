@@ -84,7 +84,7 @@ app\VpnClient.exe
 A self-contained archive (no .NET needed on the target machine):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 4.4.1
+powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 4.4.2
 ```
 
 ## Where data is stored

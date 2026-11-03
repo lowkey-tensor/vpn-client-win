@@ -85,7 +85,7 @@ app\VpnClient.exe
 Автономный архив (без установки .NET у пользователя):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 4.4.1
+powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 4.4.2
 ```
 
 ## Где хранятся данные
